@@ -1,0 +1,25 @@
+# Introduction
+
+This book describes efforts to understand how changing climate (temperature and flow regimes) and dam management practices affect population productivity of Yellowstone cutthroat trout (YCT) in the upper Snake River watershed, Wyoming, USA. We use a Ricker stock-recruitment model fit to long-term redd count data from 13 spring creek spawning populations that migrate between natal spring creeks for spawning and the mainstem Snake River for rearing. All redd count data were collected by the Wyoming Game and Fish Department Jackson Fisheries Management Team.
+
+*This information is preliminary or provisional and is subject to revision. It is being provided to meet the need for timely best science. The information has not received final approval by the U.S. Geological Survey (USGS) and is provided on the condition that neither the USGS nor the U.S. Government shall be held liable for any damages resulting from the authorized or unauthorized use of the information.*
+
+Project team: Jeff Baldock and Annika Walters
+
+------------------------------------------------------------------------
+
+<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
+
+Session Information
+
+</button>
+
+:::: {#collapseOne .accordion-collapse .collapse}
+<div>
+
+```{r}
+sessionInfo()
+```
+
+</div>
+::::
