@@ -1,0 +1,570 @@
+---
+title: "Join Fish and Env. Data"
+format: html
+---
+
+Purpose: join redd count and environmental covariate data and explore correlations between key environmental variables.
+
+```{r include=FALSE}
+library(tidyverse)
+library(sf)
+library(mapview)
+library(RColorBrewer)
+library(GGally)
+library(zoo)
+```
+
+
+## Redd Count Data
+
+Load YCT redd count data and plot time series
+```{r fig.width=8, fig.height=6}
+redds <- read_csv("Data/ReddCounts_WGFD_1971-2021_cleaned.csv") %>% 
+  filter(!stream %in% c("Cody", "Christiansen", "Dave", "Laker")) # drop Cody (too few data points) and Salt River tribs
+redds %>% ggplot() + geom_point(aes(x = year, y = reddspermile)) + geom_line(aes(x = year, y = reddspermile)) + facet_wrap(~ stream, scales = "free_y") + theme_bw() + theme(panel.grid = element_blank())
+```
+
+Map sites:
+```{r}
+reddlocs <- redds %>% group_by(stream) %>% summarize(lat = unique(lat), long = unique(long)) # summarize location data
+reddlocs_sp <- st_as_sf(reddlocs, coords = c("long", "lat"), crs = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84")
+# st_write(reddlocs_sp, "Redd Counts Ricker/Spatial/ReddCounts_SpatialLocations.shp", append = FALSE)
+mapview(reddlocs_sp) # map
+```
+
+Explore autocorrelation, which may be due to stock-recruit dynamics, autocorrelated environmental drivers, or both
+```{r fig.width=8, fig.height=6}
+sites <- unique(redds$stream)
+par(mfrow = c(4,4), mgp = c(2.5,1,0), mar = c(3.5,3.5,1,1))
+for (i in 1:length(sites)) {
+  d <- filter(redds, stream == sites[i])
+  acf(d$reddsperkm, lag.max = 6, plot = TRUE, na.action = na.pass)
+  legend("topright", legend = sites[i], bty = "n")
+}
+```
+
+For each site, add years in which data was not collected, then calculate lagged redds
+```{r}
+lagg <- 4
+rlist <- list()
+sites <- unique(redds$stream)
+for (i in 1:length(sites)) {
+  d <- filter(redds, stream == sites[i])
+  df1 <- tibble(year = seq(from = min(d$year, na.rm = TRUE), to = max(d$year, na.rm = T), by = 1))
+  rlist[[i]] <- df1 %>% left_join(d) %>% mutate(stream = sites[i], 
+                                                miles = unique(d$miles), 
+                                                kms = unique(d$kms), 
+                                                lat = unique(d$lat), 
+                                                long = unique(d$long),
+                                                reddsperkm_lag4 = lag(reddsperkm, n = lagg))
+}
+redds2 <- bind_rows(rlist)
+```
+
+Explore the effect of spawners on productivity to motivate use of Ricker model, *sensu* Jones *et al.* (2020).
+```{r  fig.width=8, fig.height=6}
+# recruits ~ spawners, combined
+# redds2 %>% ggplot(aes(x = reddsperkm_lag4, y = reddsperkm)) +
+#   geom_point(aes(colour = stream)) +
+#   geom_smooth(method = "loess")
+# recruits ~ spawners, by stream
+# redds2 %>% ggplot(aes(x = reddsperkm_lag4, y = reddsperkm)) + 
+#   geom_point(aes(colour = year)) + 
+#   geom_smooth() +
+#   facet_wrap(~stream, scales = "free")
+# # productivity ~ time, by stream
+# redds2 %>% ggplot(aes(x = year, y = log(reddsperkm/reddsperkm_lag4))) + 
+#   geom_point(aes(colour = year)) + 
+#   geom_smooth() +
+#   facet_wrap(~stream, scales = "free_y")
+# productivity ~ spawning stock, combined
+# redds2 %>% ggplot(aes(x = reddsperkm_lag4, y = log(reddsperkm/reddsperkm_lag4))) + 
+#   geom_smooth(method = "lm") +
+#   geom_point(aes(colour = stream))
+# productivity ~ spawning stock, by stream
+redds2 %>% ggplot(aes(x = reddsperkm_lag4, y = log(reddsperkm/reddsperkm_lag4), colour = year)) + 
+  geom_smooth(method = "lm") +
+  geom_point(aes(colour = year)) + 
+  facet_wrap(~stream, scales = "free")
+```
+
+Get range of years by site
+```{r}
+redds2 %>% group_by(stream) %>% summarize(start = min(year, na.rm = TRUE), stop = max(year, na.rm = TRUE))
+minby <- min(redds2$year) - 4 # minimum brood year
+```
+
+
+
+## Covariate Data
+
+Per Murdoch et al (2023) CJFAS, only include variables for which Pearson's r is < 0.6.
+
+Notes:
+* drop jld_winmean and natq_winmean from same model (pearson r = 0.639 since 1960, 0.79 since 1989)
+
+
+Load derived data files
+```{r}
+jldramp <- read_csv("Data/Derived/JLD_RampDown_Summary_CalendarYear_1960-2022.csv") #%>% mutate(broodyr = year) %>% select(-year)
+jldflow <- read_csv("Data/Derived/JLD_ManagedFlow_Covariates_BroodYear_1960-2022.csv")
+natflow <- read_csv("Data/Derived/SnakeTribs_NaturalFlow_Covariates_BroodYear_1960-2022.csv") %>% rename(flowstn = site) #%>% filter(site %in% c("SnakeBeFlat", "Salt")) 
+airtemp <- read_csv("Data/Derived/AirTemperature_Covariates_BroodYear_1960-2022.csv") %>% filter(site %in% c("moose", "afton")) %>% rename(tempstn = site) 
+
+unique(natflow$flowstn)
+```
+
+### Check correlation
+
+Use pairs plots to check correlation among key variables, within datasets:
+
+::: panel-tabset
+
+#### Ramp-down: complete
+
+```{r}
+ggpairs(jldramp %>% select(jld_rampdur, jld_rampratemindoy, jld_rampratemin_log), progress = FALSE ) # entire time series
+```
+
+#### Ramp-down: post-1989
+
+```{r}
+ggpairs(jldramp %>% filter(broodyr >= 1989) %>% select(jld_rampdur, jld_rampratemindoy, jld_rampratemin_log) , progress = FALSE) # post-1989
+```
+
+#### JLD flow: complete
+
+```{r}
+ggpairs(jldflow %>% select(jld_winmean, jld_winmin, jld_winvar, jld_summean, jld_peakmag, jld_peaktime), progress = FALSE)
+```
+
+#### JLD flow: post-1989
+
+```{r}
+ggpairs(jldflow %>% filter(broodyr >= 1989) %>% select(jld_winmean, jld_winvar, jld_summean, jld_peakmag, jld_peaktime), progress = FALSE)
+```
+
+#### Nat. flow: complete
+
+```{r}
+ggpairs(natflow %>% filter(flowstn == "SnakeNat") %>% select(natq_annmin, natq_winmean, natq_winvar, natq_peakmag, natq_peaktime), progress = FALSE)
+```
+
+#### Nat. flow: post-1989
+
+```{r}
+ggpairs(natflow %>% filter(broodyr >= 1989, flowstn == "SnakeNat") %>% select(natq_winmean, natq_winvar, natq_peakmag, natq_peaktime), progress = FALSE)
+```
+
+#### Comb. flow: complete
+
+```{r}
+ggpairs(natflow %>% filter(flowstn == "SnakeBeFlat") %>% select(natq_winmean, natq_winvar, natq_peakmag, natq_peaktime), progress = FALSE)
+```
+
+#### Comb. flow: post-1989
+
+```{r}
+ggpairs(natflow %>% filter(broodyr >= 1989, flowstn == "SnakeBeFlat") %>% select(natq_winmean, natq_winvar, natq_peakmag, natq_peaktime), progress = FALSE)
+```
+
+#### Temp: complete
+
+```{r}
+ggpairs(airtemp %>% filter(tempstn == "moose") %>% select(temp_falmean, temp_winmean, temp_sprmean, temp_summean), progress = FALSE)
+```
+
+#### Temp: post-1989
+
+```{r}
+ggpairs(airtemp %>% filter(broodyr >= 1989, tempstn == "moose") %>% select(temp_falmean, temp_winmean, temp_sprmean, temp_summean), progress = FALSE)
+```
+
+:::
+
+
+Check correlation among variables across datasets:
+```{r fig.width=10, fig.height=10}
+p <- jldramp %>% select(broodyr, jld_rampdur, jld_rampratemindoy, jld_rampratemin_log) %>%
+          left_join(jldflow %>% select(broodyr, jld_winmin, jld_summean, jld_peakmag, jld_peaktime)) %>%
+          left_join(natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_peakmag, natq_peaktime)) %>%
+          #left_join(natflow %>% filter(flowstn == "SnakeBeFlat") %>% select(broodyr, natq_winmean)) %>%
+          left_join(airtemp %>% filter(tempstn == "moose") %>% select(broodyr, temp_falmean, temp_winmean, temp_sprmean, temp_summean))
+range(cor(p, use = "pairwise.complete.obs")[upper.tri(cor(p, use = "pairwise.complete.obs"))])
+ggpairs(p, progress = FALSE)
+```
+
+
+Post 1989
+```{r fig.width=10, fig.height=10}
+p <- jldramp %>% filter(broodyr >= 1989) %>% select(broodyr, jld_rampdur, jld_rampratemindoy, jld_rampratemin_log) %>%
+          left_join(jldflow %>% filter(broodyr >= 1989) %>% select(broodyr, jld_winmin, jld_summean, jld_peakmag, jld_peaktime)) %>%
+          left_join(natflow %>% filter(broodyr >= 1989) %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_peakmag, natq_peaktime)) %>%
+          #left_join(natflow %>% filter(broodyr >= 1989) %>% filter(flowstn == "SnakeBeFlat") %>% select(broodyr, natq_winmean)) %>%
+          left_join(airtemp %>% filter(broodyr >= 1989) %>% filter(tempstn == "moose") %>% select(broodyr, temp_falmean, temp_winmean, temp_sprmean, temp_summean))
+range(cor(p, use = "pairwise.complete.obs")[upper.tri(cor(p, use = "pairwise.complete.obs"))])
+ggpairs(p, progress = FALSE)
+```
+
+
+Experienced flow
+```{r fig.width=10, fig.height=10}
+p <- jldramp %>% select(broodyr, jld_rampdur, jld_rampratemindoy, jld_rampratemin_log) %>%
+          left_join(jldflow %>% select(broodyr, jld_winvar, jld_summean)) %>%
+          #left_join(natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_peakmag, natq_peaktime)) %>%
+          left_join(natflow %>% filter(flowstn == "SnakeBeFlat") %>% select(broodyr, natq_winmean, natq_peakmag, natq_peaktime)) %>%
+          left_join(airtemp %>% filter(tempstn == "moose") %>% select(broodyr, temp_falmean, temp_winmean, temp_sprmean, temp_summean)) %>% select(-broodyr)
+range(cor(p, use = "complete.obs")[upper.tri(cor(p, use = "complete.obs"))])
+ggpairs(p, progress = FALSE)
+```
+
+
+### Test specific variables
+
+#### Winter flow
+
+JLD and natural winter flow highly correlated, especially after 1989
+```{r}
+ddd <- jldflow %>% select(broodyr, jld_winmean) %>% left_join(natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_winmean))
+cor.test(ddd$jld_winmean, ddd$natq_winmean)
+ddd1 <- ddd %>% filter(broodyr >= 1989)
+cor.test(ddd1$jld_winmean, ddd1$natq_winmean)
+ddd1 <- ddd %>% filter(broodyr < 1989)
+cor.test(ddd1$jld_winmean, ddd1$natq_winmean)
+```
+
+#### Peak timing
+
+While the timing of peak natural vs. managed flows are not correlated during the full or either partial time period, this may be driven by years of missing data for JLD peak flows...where there was not a JLD peak. Time series plots are suspicious
+```{r}
+# peak timing...ok...
+ddd <- jldflow %>% select(broodyr, jld_peaktime) %>% left_join(natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_peaktime))
+cor.test(ddd$jld_peaktime, ddd$natq_peaktime)
+plot(ddd$jld_peaktime, ddd$natq_peaktime, ylab = "brood year DOY", xlab = "year")
+plot(jld_peaktime ~ broodyr, ddd, type = "b", col = "blue")
+lines(natq_peaktime ~ broodyr, ddd, type = "b", col = "red")
+legend("bottomright", legend = c("JLD", "natural"), lty = 1, col = c("blue", "red"))
+
+ddd1 <- ddd %>% filter(broodyr >= 1989)
+cor.test(ddd1$jld_peaktime, ddd1$natq_peaktime)
+#plot(ddd1$jld_peaktime, ddd1$natq_peaktime)
+#abline(a = 0, b = 1)
+ddd1 <- ddd %>% filter(broodyr < 1989)
+cor.test(ddd1$jld_peaktime, ddd1$natq_peaktime)
+#plot(ddd1$jld_peaktime, ddd1$natq_peaktime)
+```
+
+#### Peak magnitude
+
+No multicollinearity issues between the magnitude of peak natural vs. managed flows, although these variables are somewhat correlated prior to 1989.
+```{r}
+# peak magnitude...ok...
+ddd <- jldflow %>% select(broodyr, jld_peakmag) %>% left_join(natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_peakmag))
+cor.test(ddd$jld_peakmag, ddd$natq_peakmag)
+plot(jld_peakmag ~ broodyr, ddd, type = "b", col = "blue", ylim = c(3000,20000))
+lines(natq_peakmag ~ broodyr, ddd, type = "b", col = "red")
+legend("topleft", legend = c("JLD", "natural"), lty = 1, col = c("blue", "red"))
+
+ddd1 <- ddd %>% filter(broodyr >= 1989)
+cor.test(ddd1$jld_peakmag, ddd1$natq_peakmag)
+ddd1 <- ddd %>% filter(broodyr < 1989)
+cor.test(ddd1$jld_peakmag, ddd1$natq_peakmag)
+```
+
+#### JLD peak mag and JLD win min
+
+JLD peak flow magnitude and combined winter mean flow are correlated (>0.6)...perhaps an artifact of "good water years"
+```{r}
+ddd <- jldflow %>% select(broodyr, jld_peakmag, jld_winmin)
+cor.test(ddd$jld_peakmag, ddd$jld_winmin)
+plot(jld_peakmag ~ broodyr, ddd, type = "b", col = "blue")
+par(new = TRUE)
+plot(jld_winmin ~ broodyr, ddd, type = "b", col = "red")
+legend("topleft", legend = c("JLD peak mag", "Combined winter mean"), lty = 1, col = c("blue", "red"))
+
+
+ddd1 <- ddd %>% filter(broodyr >= 1989)
+cor.test(ddd1$jld_peakmag, ddd1$jld_winmin)
+ddd1 <- ddd %>% filter(broodyr < 1989)
+cor.test(ddd1$jld_peakmag, ddd1$jld_winmin)
+```
+
+
+### Lag correlations
+
+Check correlations between variables in year t and t+1 (to separate age-0 and age-1 effects).
+
+Winter variation is the only variable that is moderately correlated between time *t* and *t+1* (0.65)
+```{r}
+cor.test(jldramp$jld_rampdur, lead(jldramp$jld_rampdur))
+cor.test(jldramp$jld_rampratemindoy, lead(jldramp$jld_rampratemindoy))
+cor.test(jldramp$jld_rampratemin_log, lead(jldramp$jld_rampratemin_log))
+cor.test(jldflow$jld_winmin, lead(jldflow$jld_winmin))                  # pearsons r = 0.65
+cor.test(jldflow$jld_summean, lead(jldflow$jld_summean))
+cor.test(jldflow$jld_peakmag, lead(jldflow$jld_peakmag))                  # pearsons r = 0.65
+cor.test(jldflow$jld_peaktime, lead(jldflow$jld_peaktime))
+
+d <- natflow %>% filter(flowstn == "SnakeNat")
+cor.test(d$natq_peakmag, lead(d$natq_peakmag))
+cor.test(d$natq_peaktime, lead(d$natq_peaktime))
+
+d <- airtemp %>% filter(tempstn == "moose")
+cor.test(d$temp_falmean, lead(d$temp_falmean))
+cor.test(d$temp_winmean, lead(d$temp_winmean))
+cor.test(d$temp_sprmean, lead(d$temp_sprmean))
+cor.test(d$temp_summean, lead(d$temp_summean))
+```
+
+
+```{r eval=FALSE}
+# correlations among natural, managed, and combined winter flow
+ddd <- jldflow %>% select(broodyr, jld_annmin) %>%
+  left_join(natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_annmin)) %>% 
+  left_join(natflow %>% filter(flowstn == "SnakeBeFlat") %>% select(broodyr, natq_annmin) %>% rename(expq_annmin = natq_annmin)) 
+ggpairs(ddd)
+ggpairs(ddd %>% filter(broodyr >= 1989))
+
+ddd <- jldflow %>% select(broodyr, jld_peakmag) %>%
+  left_join(natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_peakmag)) %>% 
+  left_join(natflow %>% filter(flowstn == "SnakeBeFlat") %>% select(broodyr, natq_peakmag) %>% rename(expq_peakmag = natq_peakmag)) 
+ggpairs(ddd)
+ggpairs(ddd %>% filter(broodyr >= 1989))
+
+ddd <- jldflow %>% select(broodyr, jld_peaktime) %>%
+  left_join(natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_peaktime)) %>% 
+  left_join(natflow %>% filter(flowstn == "SnakeBeFlat") %>% select(broodyr, natq_peaktime) %>% rename(expq_peaktime = natq_peaktime)) 
+ggpairs(ddd)
+ggpairs(ddd %>% filter(broodyr >= 1989))
+
+
+# winter flow time series plots
+ddd <- jldflow %>% select(broodyr, jld_annmin) %>% 
+  left_join(natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_annmin)) %>% 
+  mutate(tot_annmin = jld_annmin + natq_annmin,
+         prop_annmin = jld_annmin/tot_annmin) %>% filter(!is.na(tot_annmin))
+ddd$cor <- NA
+ddd$cor[5:44] <- rollapply(ddd, width = 9, function(x) abs(cor(x[,2], x[,3])), by.column = FALSE)
+
+par(mfrow = c(3,1), mar = c(3,4,0.5,0.5), mgp = c(2.5,1,0))
+plot(tot_annmin ~ broodyr, ddd, type = "n", ylim = c(0,2500), xlab = "", ylab = "Winter flow (cfs)", bty = "l")
+polygon(x = c(ddd$broodyr, rev(ddd$broodyr)), y = c(rep(0, times = dim(ddd)[1]), rev(ddd$tot_annmin)), border = NA, col = "grey")
+polygon(x = c(ddd$broodyr, rev(ddd$broodyr)), y = c(rep(0, times = dim(ddd)[1]), rev(ddd$natq_annmin)), border = NA, col = "white")
+polygon(x = c(ddd$broodyr, rev(ddd$broodyr)), y = c(rep(0, times = dim(ddd)[1]), rev(ddd$jld_annmin)), border = NA, col = "white")
+polygon(x = c(ddd$broodyr, rev(ddd$broodyr)), y = c(rep(0, times = dim(ddd)[1]), rev(ddd$natq_annmin)), border = NA, col = scales::alpha("darkorchid2", 1))
+polygon(x = c(ddd$broodyr, rev(ddd$broodyr)), y = c(rep(0, times = dim(ddd)[1]), rev(ddd$jld_annmin)), border = NA, col = scales::alpha("goldenrod1", 1))
+legend("topright", legend = c("Total", "Natural", "Managed"), fill = c("grey", "darkorchid2", "goldenrod1"), bty = "n")
+plot(prop_annmin ~ broodyr, ddd, type = "l", bty = "l", xlab = "", ylab = "JLD contribution to winter flow")
+points(prop_annmin ~ broodyr, ddd, pch = 16)
+plot(cor ~ broodyr, ddd, type = "l", bty = "l", xlab = "", ylab = "Correlation (rolling 9-year window)", ylim = c(0,1))
+points(cor ~ broodyr, ddd, pch = 16)
+abline(h = 0.6, lty = 2, col = "red")
+```
+
+
+## Select Covariates and Standardize
+
+Pull out relevant variables, trim to temporal extent of redd count data (by brood year. I.e., redd counts start at 1971 but environmental data starts at 1967), and standardize (mean centered and scaled). 
+
+```{r}
+# Managed flow variables
+covsrc_jldq <- jldramp %>% select(broodyr, jld_rampdur, jld_rampratemindoy, jld_rampratemin_log) %>%
+  filter(broodyr >= minby) %>%
+  left_join(jldflow %>% select(broodyr, jld_winmean, jld_winmin, jld_winvar, jld_summean, jld_peakmag, jld_peaktime)) %>%
+  #mutate(jld_winmin_log = ifelse(jld_winmin_log < 4, NA, jld_winmin_log)) %>%
+  mutate(z_jld_rampdur = scale(jld_rampdur, center = TRUE, scale = TRUE)[,1], 
+         z_jld_rampratemindoy = scale(jld_rampratemindoy, center = TRUE, scale = TRUE)[,1], 
+         z_jld_rampratemin_log = scale(jld_rampratemin_log, center = TRUE, scale = TRUE)[,1],
+         z_jld_winmean = scale(jld_winmean, center = TRUE, scale = TRUE)[,1],
+         z_jld_winmin = scale(jld_winmin, center = TRUE, scale = TRUE)[,1],
+         z_jld_winvar = scale(jld_winvar, center = TRUE, scale = TRUE)[,1],
+         z_jld_summean = scale(jld_summean, center = TRUE, scale = TRUE)[,1],
+         z_jld_peakmag = scale(jld_peakmag, center = TRUE, scale = TRUE)[,1],
+         z_jld_peaktime = scale(jld_peaktime, center = TRUE, scale = TRUE)[,1])
+#ggpairs(covsrc_jldq %>% select(broodyr, jld_rampdur, jld_rampratemindoy, jld_rampratemin_log, jld_winmean, jld_winmin, jld_winvar, jld_summean, jld_peakmag, jld_peaktime))
+
+# Managed flow variables - ramp-down only
+covsrc_jldq_rd <- jldramp %>% select(broodyr, jld_rampdur, jld_rampratemindoy, jld_rampratemin_log) %>%
+  filter(broodyr >= minby) %>%
+  #mutate(jld_rampratemin = ifelse(jld_rampratemin < -2000, NA, jld_rampratemin)) %>%
+  mutate(z_jld_rampdur = scale(jld_rampdur, center = TRUE, scale = TRUE)[,1], 
+         z_jld_rampratemindoy = scale(jld_rampratemindoy, center = TRUE, scale = TRUE)[,1], 
+         z_jld_rampratemin_log = scale(jld_rampratemin_log, center = TRUE, scale = TRUE)[,1])
+#ggpairs(covsrc_jldq_rd %>% select(broodyr, jld_rampdur, jld_rampratemindoy, jld_rampratemin_log))
+
+# Natural/wild flow variables 
+covsrc_natq <- natflow %>% filter(flowstn %in% c("SnakeNat")) %>% # make sure flow station is correct!
+  select(flowstn, broodyr, natq_falmean_log, natq_winmean_log, natq_sprmean_log, natq_summean_log, natq_winvar, natq_peakmag, natq_peaktime) %>% #rename(flowstn = site) %>% 
+  filter(broodyr >= minby) %>%
+  mutate(z_natq_winvar = scale(natq_winvar, center = TRUE, scale = TRUE)[,1]) %>%
+  mutate(z_natq_falmean_log = scale(natq_falmean_log, center = TRUE, scale = TRUE)[,1], 
+         z_natq_winmean_log = scale(natq_winmean_log, center = TRUE, scale = TRUE)[,1], 
+         z_natq_sprmean_log = scale(natq_sprmean_log, center = TRUE, scale = TRUE)[,1], 
+         z_natq_summean_log = scale(natq_summean_log, center = TRUE, scale = TRUE)[,1], 
+         z_natq_peakmag = scale(natq_peakmag, center = TRUE, scale = TRUE)[,1], 
+         z_natq_peaktime = scale(natq_peaktime, center = TRUE, scale = TRUE)[,1]) %>% ungroup()
+#ggpairs(covsrc_natq %>% select(broodyr, natq_falmean_log, natq_winmean_log, natq_sprmean_log, natq_summean_log, natq_winvar, natq_peakmag, natq_peaktime))
+
+# Experienced flow variables
+covsrc_expq <- natflow %>% filter(flowstn %in% c("SnakeBeFlat")) %>%
+  select(flowstn, broodyr, natq_winmean, natq_winvar, natq_summean, natq_peakmag, natq_peaktime) %>%
+  filter(broodyr >= minby) %>%
+  mutate(z_natq_winmean = scale(natq_winmean, center = TRUE, scale = TRUE)[,1], 
+         z_natq_winvar = scale(natq_winvar, center = TRUE, scale = TRUE)[,1], 
+         z_natq_summean = scale(natq_summean, center = TRUE, scale = TRUE)[,1], 
+         z_natq_peakmag = scale(natq_peakmag, center = TRUE, scale = TRUE)[,1], 
+         z_natq_peaktime = scale(natq_peaktime, center = TRUE, scale = TRUE)[,1])
+#ggpairs(covsrc_expq %>% select(broodyr, natq_winmean, natq_winvar, natq_summean, natq_peakmag, natq_peaktime))
+
+# Temperature variables
+covsrc_temp <- airtemp %>% filter(tempstn %in% c("moose")) %>%
+  select(tempstn, broodyr, temp_falmean, temp_winmean, temp_sprmean, temp_summean) %>% #rename(tempstn = site) %>% #group_by(tempstn) %>%
+  filter(broodyr >= minby) %>%
+  mutate(z_temp_falmean = scale(temp_falmean, center = TRUE, scale = TRUE)[,1], 
+         z_temp_winmean = scale(temp_winmean, center = TRUE, scale = TRUE)[,1], 
+         z_temp_sprmean = scale(temp_sprmean, center = TRUE, scale = TRUE)[,1], 
+         z_temp_summean = scale(temp_summean, center = TRUE, scale = TRUE)[,1]) %>% ungroup()
+#ggpairs(covsrc_temp %>% select(broodyr, temp_falmean, temp_winmean, temp_sprmean, temp_summean))
+```
+
+Create and write out summary tables (means and standard deviations)
+```{r}
+# JLD Flow
+covsrc_jldq_summary <- tibble(cov = c("z_jld_rampdur", "z_jld_rampratemindoy", "z_jld_rampratemin_log", "z_jld_winmean", "z_jld_winmin", "z_jld_winvar", "z_jld_summean", "z_jld_peakmag", "z_jld_peaktime"),
+                              mean = c(attr(scale(covsrc_jldq$jld_rampdur, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_jldq$jld_rampratemindoy, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_jldq$jld_rampratemin_log, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_jldq$jld_winmean, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_jldq$jld_winmin, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_jldq$jld_winvar, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_jldq$jld_summean, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_jldq$jld_peakmag, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_jldq$jld_peaktime, center = TRUE, scale = TRUE), "scaled:center")),
+                              sd = c(attr(scale(covsrc_jldq$jld_rampdur, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_jldq$jld_rampratemindoy, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_jldq$jld_rampratemin_log, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_jldq$jld_winmean, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_jldq$jld_winmin, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_jldq$jld_winvar, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_jldq$jld_summean, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_jldq$jld_peakmag, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_jldq$jld_peaktime, center = TRUE, scale = TRUE), "scaled:scale")))
+write_csv(covsrc_jldq_summary, "Data/Derived/ManagedFlow_SummaryMeanSD_1967-2022.csv")
+
+# Natural Flow
+covsrc_natq_summary <- tibble(cov = c("z_natq_falmean_log", "z_natq_winmean_log", "z_natq_sprmean_log", "z_natq_summean_log", "z_natq_winvar", "z_natq_peakmag", "z_natq_peaktime"),
+                              mean = c(attr(scale(covsrc_natq$natq_falmean_log, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_natq$natq_winmean_log, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_natq$natq_sprmean_log, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_natq$natq_summean_log, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_natq$natq_winvar, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_natq$natq_peakmag, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_natq$natq_peaktime, center = TRUE, scale = TRUE), "scaled:center")),
+                              sd = c(attr(scale(covsrc_natq$natq_falmean_log, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_natq$natq_winmean_log, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_natq$natq_sprmean_log, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_natq$natq_summean_log, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_natq$natq_winvar, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_natq$natq_peakmag, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_natq$natq_peaktime, center = TRUE, scale = TRUE), "scaled:scale")))
+write_csv(covsrc_natq_summary, "Data/Derived/NaturalFlow_SummaryMeanSD_1975-2022.csv")
+
+# Experienced Flow
+covsrc_expq_summary <- tibble(cov = c("z_expq_winmean", "z_expq_winvar", "z_expq_summean", "z_expq_peakmag", "z_expq_peaktime"),
+                              mean = c(attr(scale(covsrc_expq$natq_winmean, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_expq$natq_winvar, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_expq$natq_summean, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_expq$natq_peakmag, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_expq$natq_peaktime, center = TRUE, scale = TRUE), "scaled:center")),
+                              sd = c(attr(scale(covsrc_expq$natq_winmean, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_expq$natq_winvar, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_expq$natq_summean, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_expq$natq_peakmag, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_expq$natq_peaktime, center = TRUE, scale = TRUE), "scaled:scale")))
+write_csv(covsrc_expq_summary, "Data/Derived/ExperiencedFlow_SummaryMeanSD_1975-2022.csv")
+
+# Temperature
+covsrc_temp_summary <- tibble(cov = c("z_temp_falmean", "z_temp_winmean", "z_temp_sprmean", "z_temp_summean"),
+                              mean = c(attr(scale(covsrc_temp$temp_falmean, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_temp$temp_winmean, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_temp$temp_sprmean, center = TRUE, scale = TRUE), "scaled:center"),
+                                       attr(scale(covsrc_temp$temp_summean, center = TRUE, scale = TRUE), "scaled:center")),
+                              sd = c(attr(scale(covsrc_temp$temp_falmean, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_temp$temp_winmean, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_temp$temp_sprmean, center = TRUE, scale = TRUE), "scaled:scale"),
+                                     attr(scale(covsrc_temp$temp_summean, center = TRUE, scale = TRUE), "scaled:scale")))
+write_csv(covsrc_temp_summary, "Data/Derived/Temperature_SummaryMeanSD_1967-2022.csv")
+```
+
+
+## Join Covariate and Fish Data
+
+### Separate natural and managed flow components
+
+Age-0 (4-year lag)
+```{r}
+redds3a <- redds2
+redds3a$broodyr <- redds3a$year - 4 # create broodyr variable for joining
+redds3a$tempstn <- ifelse(redds3a$stream %in% c("Christiansen", "Dave", "Laker"), "afton", "moose") # basin ID to match to NWS temp station
+redds3a$flowstn <- ifelse(redds3a$stream %in% c("Christiansen", "Dave", "Laker"), "Salt", "SnakeNat") # basin ID to match to USGS flow station 
+redds3a <- redds3a %>% 
+  left_join(covsrc_jldq, by = "broodyr") %>% 
+  left_join(covsrc_natq, by = c("broodyr", "flowstn")) %>% 
+  left_join(covsrc_temp, by = c("broodyr", "tempstn"))
+```
+
+Age-1 (3-year lag)
+```{r}
+redds3b <- redds2
+redds3b$broodyr <- redds3b$year - 3 # create broodyr variable for joining
+redds3b$tempstn <- ifelse(redds3b$stream %in% c("Christiansen", "Dave", "Laker"), "afton", "moose") # basin ID to match to NWS temp station
+redds3b$flowstn <- ifelse(redds3b$stream %in% c("Christiansen", "Dave", "Laker"), "Salt", "SnakeNat") # basin ID to match to USGS flow station 
+redds3b <- redds3b %>% 
+  left_join(covsrc_jldq, by = "broodyr") %>% 
+  left_join(covsrc_natq, by = c("broodyr", "flowstn")) %>% 
+  left_join(covsrc_temp, by = c("broodyr", "tempstn"))
+```
+
+
+### Experienced flow
+
+Age-0 (4-year lag)
+```{r}
+redds3c <- redds2
+redds3c$broodyr <- redds3c$year - 4 # create broodyr variable for joining
+redds3c$tempstn <- ifelse(redds3c$stream %in% c("Christiansen", "Dave", "Laker"), "afton", "moose") # basin ID to match to NWS temp station
+redds3c$flowstn <- ifelse(redds3c$stream %in% c("Christiansen", "Dave", "Laker"), "Salt", "SnakeBeFlat") # basin ID to match to USGS flow station 
+redds3c <- redds3c %>% 
+  left_join(covsrc_jldq_rd, by = "broodyr") %>% 
+  left_join(covsrc_expq, by = c("broodyr", "flowstn")) %>% 
+  left_join(covsrc_temp, by = c("broodyr", "tempstn"))
+```
+
+Age-1 (3-year lag)
+```{r}
+redds3d <- redds2
+redds3d$broodyr <- redds3d$year - 3 # create broodyr variable for joining
+redds3d$tempstn <- ifelse(redds3d$stream %in% c("Christiansen", "Dave", "Laker"), "afton", "moose") # basin ID to match to NWS temp station
+redds3d$flowstn <- ifelse(redds3d$stream %in% c("Christiansen", "Dave", "Laker"), "Salt", "SnakeBeFlat") # basin ID to match to USGS flow station 
+redds3d <- redds3d %>% 
+  left_join(covsrc_jldq_rd, by = "broodyr") %>% 
+  left_join(covsrc_expq, by = c("broodyr", "flowstn")) %>% 
+  left_join(covsrc_temp, by = c("broodyr", "tempstn"))
+```
+
+
+### Write out data files
+```{r}
+write_csv(redds3a, "Data/Derived/ReddCounts_WGFD_1971-2021_cleaned_withFlowTempCovariates_SeparateFlowComponents_age0.csv")
+write_csv(redds3b, "Data/Derived/ReddCounts_WGFD_1971-2021_cleaned_withFlowTempCovariates_SeparateFlowComponents_age1.csv")
+write_csv(redds3c, "Data/Derived/ReddCounts_WGFD_1971-2021_cleaned_withFlowTempCovariates_ExperiencedFlow_age0.csv")
+write_csv(redds3d, "Data/Derived/ReddCounts_WGFD_1971-2021_cleaned_withFlowTempCovariates_ExperiencedFlow_age1.csv")
+```
+
+
+```{r eval=FALSE}
+plot(natq_winmean ~ broodyr, covsrc_expq, type = "b")
+plot(natq_winvar ~ broodyr, covsrc_expq, type = "b")
+plot(natq_peakmag ~ broodyr, covsrc_expq, type = "b")
+plot(natq_peaktime ~ broodyr, covsrc_expq, type = "b")
+```
+
