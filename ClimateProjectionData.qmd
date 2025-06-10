@@ -1,0 +1,280 @@
+---
+title: "Future Climate Projections"
+---
+
+
+Purpose: Generate future seasonal mean air temperature projections from GCM data (Rahimi *et al.* 2024, Geoscientific Model Development)
+
+```{r include=FALSE}
+library(tidyverse)
+library(ggpubr)
+```
+
+
+## Generate seasonal projections
+
+Some misc. objects
+```{r}
+patt <- c("t2min_atStation_corrected", "t2max_atStation_corrected", "t2min_atStation_original", "t2max_atStation_original")
+summ <- c("min", "max", "min", "max")
+type <- c("corrected", "corrected", "original", "original")
+mylist <- list()
+```
+
+Pull in climate projection data
+```{r}
+for(i in 1:length(patt)) {
+  myfiles <- list.files("Data/GCM Archive", pattern = patt[i], full.names = TRUE)
+  dat <- read_csv(myfiles, id = "file_name")[,c(1,2,5)] %>% mutate(summ = summ[i], type = type[i], gcm = str_match(file_name, "Archive/\\s*(.*?)\\s*_t2")[,2])
+  dat <- dat %>% select(6,4,5,2,3) %>% rename(date = 4, temp = 5)
+  mylist[[i]] <- dat
+  #print(i)
+}
+dat <- do.call(rbind, mylist)
+summary(dat)
+head(dat)
+```
+
+Notes:
+
+* Some GCMs do not predict for Feb 29 (leap years)
+* ukesm1-0-ll_r2i1p1f2 predicts for 30 days per month, even in Feb (but does not actually have dates for Feb 29/30)
+
+```{r eval=FALSE}
+view(dat %>% group_by(gcm, summ, type) %>% summarise(mind = min(date, na.rm = T), maxd = max(date, na.rm = T), n = n()))
+```
+
+Some GCMs do not predict for Feb 29 (leap years)...drop NAs
+```{r}
+dat <- dat %>% filter(!is.na(date))
+```
+
+Find daily mean temp for each climate model
+```{r}
+dat2 <- dat %>% group_by(gcm, type, date) %>% summarize(temp_mean = mean(temp)-273.15) %>% ungroup()
+dat2 %>% group_by(gcm) %>% summarise(mind = min(date), maxd = max(date), n = n())
+#sum(is.na(dat2$temp_mean))
+```
+
+### Vizualize raw GCM data
+
+Group by year, plot time series of annual means.
+```{r}
+dat2 %>% mutate(year = year(date)) %>% group_by(gcm, year) %>% summarize(ann_temp = mean(temp_mean)) %>% ggplot() + geom_line(aes(x = year, y = ann_temp, group = gcm, colour = gcm))
+```
+
+View corrected daily (mean) air temp for a single year (1981)
+```{r}
+dat2 %>% filter(date >= "1981-01-01" & date <= "1981-12-31", type == "corrected") %>% ggplot() + geom_line(aes(x = date, y = temp_mean, group = gcm, colour = gcm))
+```
+
+
+### Summarize across seasons
+
+Summarize GCM data across four seasons
+```{r}
+dat2 <- dat2 %>% mutate(season = ifelse(month(date) %in% c(9,10,11), "fal",
+                                        ifelse(month(date) %in% c(12,1,2), "win",
+                                               ifelse(month(date) %in% c(3,4,5), "spr", "sum"))))
+dat3 <- dat2 %>% group_by(gcm, type, season, year(date)) %>% summarize(temp_mean = mean(temp_mean)) %>% rename(year = 4)
+```
+
+Plot time series of seasonal mean air temperature:
+```{r}
+dat3 %>% ggplot() + geom_line(aes(x = year, y = temp_mean, group = gcm, colour = gcm)) + facet_wrap(~season)
+```
+
+
+### Summarize across GCMs
+
+Summarize seasonal mean air temperature across 15 GCMs
+```{r}
+dat_summ <- dat3 %>% group_by(type, season, year) %>% summarize(count = n(), temp_avg = mean(temp_mean, na.rm = T), temp_sd = sd(temp_mean, na.rm = T), temp_min = min(temp_mean, na.rm = T), temp_max = max(temp_mean, na.rm = T)) %>% ungroup()
+```
+
+Plot raw and corrected output: mean min and max
+```{r}
+dat_summ %>% ggplot() + geom_line(aes(x = year, y = temp_avg)) + geom_line(aes(x = year, y = temp_min), color = 4) + geom_line(aes(x = year, y = temp_max), color = 2) + facet_wrap(~season + type)
+```
+
+View winter corrected only:
+```{r}
+dat_summ %>% filter(season == "win", type == "corrected") %>% ggplot() + geom_line(aes(x = year, y = temp_avg)) + geom_line(aes(x = year, y = temp_min), linetype = 2) + geom_line(aes(x = year, y = temp_max), linetype = 2) 
+```
+
+
+### Write out data files
+
+```{r}
+write_csv(dat3, "Data/Derived/SeasonalMeanAirTemp_byGCM_1980-2099.csv")
+write_csv(dat_summ, "Data/Derived/SeasonalMeanAirTemp_Summarized_1980-2099.csv")
+```
+
+
+### Read derived data
+
+```{r}
+dat3 <- read_csv("Data/Derived/SeasonalMeanAirTemp_byGCM_1980-2099.csv")
+dat_summ <- read_csv("Data/Derived/SeasonalMeanAirTemp_Summarized_1980-2099.csv")
+```
+
+
+## Compare to observed data
+
+Load NWS air temperature data from Moose, WY
+```{r}
+airsum <- read_csv("Data/Derived/AirTemperature_Covariates_BroodYear_1960-2022.csv")
+```
+
+
+Compare observed data with projections from individual GCMs
+
+::: panel-tabset
+
+#### Autumn
+
+```{r}
+ggplot() + 
+  geom_line(data = dat3 %>% filter(season == "fal"), aes(x = year, y = temp_mean, group = gcm, colour = gcm)) +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_falmean), size = 1.2) + xlim(1960,2100) +
+  facet_wrap(~ type, ncol = 2) + theme(legend.position = "none")
+```
+
+#### Winter
+
+```{r}
+ggplot() + 
+  geom_line(data = dat3 %>% filter(season == "win"), aes(x = year, y = temp_mean, group = gcm, colour = gcm)) +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_winmean), size = 1.2) + xlim(1960,2100) +
+  facet_wrap(~ type, ncol = 2) + theme(legend.position = "none")
+```
+
+#### Spring
+
+```{r}
+ggplot() + 
+  geom_line(data = dat3 %>% filter(season == "spr"), aes(x = year, y = temp_mean, group = gcm, colour = gcm)) +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_sprmean), size = 1.2) + xlim(1960,2100) +
+  facet_wrap(~ type, ncol = 2) + theme(legend.position = "none")
+```
+
+#### Summer
+
+```{r}
+ggplot() + 
+  geom_line(data = dat3 %>% filter(season == "sum"), aes(x = year, y = temp_mean, group = gcm, colour = gcm)) +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_summean), size = 1.2) + xlim(1960,2100) +
+  facet_wrap(~ type, ncol = 2) + theme(legend.position = "none")
+```
+
+::: 
+
+
+Compare observed data with projections summarized across all GCMs
+
+::: panel-tabset
+
+#### Autumn
+
+```{r}
+ggplot() + 
+  geom_line(data = dat_summ %>% filter(season == "fal"), aes(x = year, y = temp_avg)) + 
+  geom_line(data = dat_summ %>% filter(season == "fal"), aes(x = year, y = temp_min), color = 4) + 
+  geom_line(data = dat_summ %>% filter(season == "fal"), aes(x = year, y = temp_max), color = 2) +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_falmean), size = 1.2) + xlim(1960,2100) +
+  facet_wrap(~ type, ncol = 2) + theme(legend.position = "none")
+```
+
+#### Winter
+
+```{r}
+ggplot() + 
+  geom_line(data = dat_summ %>% filter(season == "win"), aes(x = year, y = temp_avg)) + 
+  geom_line(data = dat_summ %>% filter(season == "win"), aes(x = year, y = temp_min), color = 4) + 
+  geom_line(data = dat_summ %>% filter(season == "win"), aes(x = year, y = temp_max), color = 2) +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_winmean), size = 1.2) + xlim(1960,2100) +
+  facet_wrap(~ type, ncol = 2) + theme(legend.position = "none")
+```
+
+#### Spring
+
+```{r}
+ggplot() + 
+  geom_line(data = dat_summ %>% filter(season == "spr"), aes(x = year, y = temp_avg)) + 
+  geom_line(data = dat_summ %>% filter(season == "spr"), aes(x = year, y = temp_min), color = 4) + 
+  geom_line(data = dat_summ %>% filter(season == "spr"), aes(x = year, y = temp_max), color = 2) +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_sprmean), size = 1.2) + xlim(1960,2100) +
+  facet_wrap(~ type, ncol = 2) + theme(legend.position = "none")
+```
+
+#### Summer
+
+```{r}
+ggplot() + 
+  geom_line(data = dat_summ %>% filter(season == "sum"), aes(x = year, y = temp_avg)) + 
+  geom_line(data = dat_summ %>% filter(season == "sum"), aes(x = year, y = temp_min), color = 4) + 
+  geom_line(data = dat_summ %>% filter(season == "sum"), aes(x = year, y = temp_max), color = 2) +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_summean), size = 1.2) + xlim(1960,2100) +
+  facet_wrap(~ type, ncol = 2) + theme(legend.position = "none")
+```
+
+:::
+
+
+Combined plot for supplementary file
+
+```{r include=FALSE}
+# autumn
+p1 <- ggplot() + 
+  geom_line(data = dat3 %>% filter(season == "fal", type == "corrected", year %in% c(1981:2098)), aes(x = year, y = temp_mean, group = gcm), color = "grey", size = 0.2) +
+  geom_line(data = dat_summ %>% filter(season == "fal", type == "corrected", year %in% c(1981:2098)), aes(x = year, y = temp_avg), color = "blue") +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_falmean)) + 
+  geom_vline(xintercept = 2050, linetype = 2) + xlim(1960,2100) +
+  theme_classic() + theme(legend.position = "none") + xlab("") + ylab(expression(paste("Mean autumn air temperature ("^"o", "C)", sep = "")))
+# winter
+p2 <- ggplot() + 
+  geom_line(data = dat3 %>% filter(season == "win", type == "corrected", year %in% c(1981:2098)), aes(x = year, y = temp_mean, group = gcm), color = "grey", size = 0.2) +
+  geom_line(data = dat_summ %>% filter(season == "win", type == "corrected", year %in% c(1981:2098)), aes(x = year, y = temp_avg), color = "blue") +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_winmean)) + 
+  geom_vline(xintercept = 2050, linetype = 2) + xlim(1960,2100) +
+  theme_classic() + theme(legend.position = "none") + xlab("") + ylab(expression(paste("Mean winter air temperature ("^"o", "C)", sep = "")))
+# spring
+p3 <- ggplot() + 
+  geom_line(data = dat3 %>% filter(season == "spr", type == "corrected", year %in% c(1981:2098)), aes(x = year, y = temp_mean, group = gcm), color = "grey", size = 0.2) +
+  geom_line(data = dat_summ %>% filter(season == "spr", type == "corrected", year %in% c(1981:2098)), aes(x = year, y = temp_avg), color = "blue") +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_sprmean)) + 
+  geom_vline(xintercept = 2050, linetype = 2) + xlim(1960,2100) +
+  theme_classic() + theme(legend.position = "none") + xlab("") + ylab(expression(paste("Mean spring air temperature ("^"o", "C)", sep = "")))
+# summer
+p4 <- ggplot() + 
+  geom_line(data = dat3 %>% filter(season == "sum", type == "corrected", year %in% c(1981:2098)), aes(x = year, y = temp_mean, group = gcm), color = "grey", size = 0.2) +
+  geom_line(data = dat_summ %>% filter(season == "sum", type == "corrected", year %in% c(1981:2098)), aes(x = year, y = temp_avg), color = "blue") +
+  geom_line(data = airsum %>% filter(site == "moose"), aes(x = broodyr, y = temp_summean)) + 
+  geom_vline(xintercept = 2050, linetype = 2) + xlim(1960,2100) +
+  theme_classic() + theme(legend.position = "none") + xlab("") + ylab(expression(paste("Mean summer air temperature ("^"o", "C)", sep = "")))
+
+jpeg("Figures/Projections/SeasonalMeanAirTemp_1980-2099.jpg", res = 500, width = 7, height = 7, units = "in")
+ggarrange(p1, p2, p3, p4, ncol = 2, nrow = 2)
+dev.off()
+```
+
+
+
+## Exceedance timeline
+
+When will projected seasonal means consistently exceed observed data (w/in the time frame of redd count monitoring)?
+
+* Autumn: 2045-2050
+* Winter: 2083
+* Spring: 2065
+* Summer: 2050-2055
+
+```{r}
+maxobs <- airsum %>% filter(site == "moose", broodyr %in% c(1980:2015)) %>% group_by(site) %>% summarise(maxfal = max(temp_falmean, na.rm = T), maxwin = max(temp_winmean, na.rm = T), maxspr = max(temp_sprmean, na.rm = T), maxsum = max(temp_summean, na.rm = T))
+
+dat_summ %>% filter(type == "corrected", season == "fal", temp_avg >= c(maxobs[1,2])) # 2045-2050
+dat_summ %>% filter(type == "corrected", season == "win", temp_avg >= c(maxobs[1,3])) # 2083
+dat_summ %>% filter(type == "corrected", season == "spr", temp_avg >= c(maxobs[1,4])) # 2065
+dat_summ %>% filter(type == "corrected", season == "sum", temp_avg >= c(maxobs[1,5])) # 2050-2055
+```
+
