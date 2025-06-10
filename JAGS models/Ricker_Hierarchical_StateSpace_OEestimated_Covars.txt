@@ -1,0 +1,102 @@
+model {
+
+##--- LIKELIHOOD ---------------------------------------------------##
+
+# OBSERVATION PROCESS
+for (j in 1:numPops) {
+    for (i in 1:numYears[j]) {
+        logY0[j,i] ~ dnorm(logY[j,i], pow(sigma.oe, -2)) 
+        N[j,i] <- exp(logY[j,i])
+        }
+    }
+
+# STATE PROCESS
+for (j in 1:numPops) {
+
+    # STARTING VALUES / INITIALIZATION
+    Y1[j] ~ dunif(1, maxY[j])
+    Y2[j] ~ dunif(1, maxY[j])
+    Y3[j] ~ dunif(1, maxY[j])
+    Y4[j] ~ dunif(1, maxY[j])
+    logY[j,1] <- log(Y1[j])
+    logY[j,2] <- log(Y2[j])
+    logY[j,3] <- log(Y3[j])
+    logY[j,4] <- log(Y4[j])
+
+    logresid[j,4] <- 0
+
+    # ALL OTHER YEARS
+    for (i in 5:numYears[j]) {
+
+        # Derive population and year specific covariate effects 
+        for (c in 1:numCovars) { 
+            covars[j,i,c] ~ dnorm(0, pow(1, -2))
+            cov.eff[j,i,c] <- coef[j,c] * covars[j,i,c] }
+        
+        # Likelihood and predictions
+        logY[j,i] ~ dnorm(logpred2[j,i], pow(sigma.pe[j], -2))
+        logpred[j,i] <- logY[j,i-4] + A[j] - B[j] * exp(logY[j,i-4]) + sum(cov.eff[j,i,1:numCovars])
+                
+        # save observations and latent states in loop to exclude starting values from model object
+        loglatent[j,i] <- logY[j,i]
+        logobserv[j,i] <- logY0[j,i]
+        
+        # Auto-correlated residuals
+        logresid[j,i] <- logY[j,i] - logpred[j,i]
+        logpred2[j,i] <- logpred[j,i] + logresid[j,i-1] * phi[j]
+        logresid2[j,i] <- logY[j,i] - logpred2[j,i]
+        
+        # Log-likelihood
+        loglik[j,i] <- logdensity.norm(logY0[j,i], logY[j,i], pow(sigma.oe, -2))
+        }
+    }
+
+
+##--- PRIORS --------------------------------------------------------##
+
+# Observation error is shared among populations, constrained prior...consider centering this on Baldock et al (2023) CJFAS estimate
+sigma.oe ~ dunif(0.001, 100) #dnorm(0, pow(0.5, -2)) T(0,)
+
+# Population-specific parameters
+for (j in 1:numPops) {
+
+    # Ricker A
+    #expA[j] ~ dunif(0, 20)
+    #A[j] <- log(expA[j])
+    A[j] ~ dnorm(mu.A, pow(sigma.A, -2)) 
+
+    # Ricker B
+    B[j] ~ dnorm(0, pow(1, -2)) T(0,)
+    #B[j] ~ dnorm(mu.B, pow(sigma.B, -2))
+
+    # Covariate effects
+    for (c in 1:numCovars) { coef[j,c] ~ dnorm(mu.coef[c], pow(sigma.coef[c], -2)) }
+
+    # Process error
+    sigma.pe[j] ~ dunif(0.001, 100) #dnorm(0, pow(5, -2)) T(0,)
+
+    # auto-correlated residuals
+    phi[j] ~ dunif(-0.99, 0.99)
+
+    }
+
+# Global Ricker A and B
+mu.A <- log(exp.mu.A) #dunif(0, 20)
+exp.mu.A ~ dunif(0, 20)
+sigma.A ~ dunif(0.001, 100)
+#mu.B ~ dnorm(0, pow(1, -2)) T(0,)
+#sigma.B ~ dunif(0.001, 100)
+
+# Global covariate effects
+for (c in 1:numCovars) { 
+    mu.coef[c] ~ dnorm(0, pow(25, -2)) 
+    sigma.coef[c] ~ dunif(0.001, 100) #dnorm(0, pow(5, -2)) T(0.001,100)
+    }
+
+
+##--- DERIVED QUANTITIES ---------------------------------------------##
+
+# Population specific carrying capacity
+for (j in 1:numPops) { K[j] <- A[j] / B[j] }
+
+}
