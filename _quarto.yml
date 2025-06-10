@@ -18,6 +18,16 @@ book:
   date: today
   chapters:
     - index.qmd
+    - part: "Data"
+      chapters:
+        - FlowTemp_Covariates.qmd
+        - JoinFishDataWithCovariates.qmd
+    - part: "Modeling"
+      chapters:
+        - ReddCountsRicker.qmd
+    - part: "Projections"
+      chapters:
+        - ClimateProjectionData.qmd
 
 
 
