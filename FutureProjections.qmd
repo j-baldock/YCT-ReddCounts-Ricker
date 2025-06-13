@@ -1,0 +1,488 @@
+---
+title: "Population Projections"
+---
+
+Purpose: Develop tools to understand effects of alternative water management and climate scenarios on future YCT productivity. Generate estimates/projections of future population productivity and redd density from the fitted Bayesian state-space hierarchical Ricker stock-recuitment model.
+
+```{r}
+library(manipulate)
+library(tidyverse)
+library(abind)
+library(DT)
+library(sf)
+library(mapview)
+```
+
+
+## Load data
+
+***reddctsumm***: summarized redd count data (coordinates, start and end years, number of years, and median redd density)
+```{r}
+reddctsumm <- read_csv("ReddCounts_DataSummary.csv")
+datatable(reddctsumm %>% mutate(across(c(lat, long, med.redds), round, 3)))
+```
+
+
+***Mcmcdat***: Raw MCMC samples from the Bayesian model
+```{r cache=FALSE}
+Mcmcdat <- read_csv("Model output/ReddCountsRicker_Phase1_Age01p_mcmcsamps.csv")
+head(Mcmcdat)
+```
+
+***param.summary***: Summarized MCMC output (means, standard deviations, and credible intervals)
+```{r}
+param.summary <- read.csv("Model output/ReddCountsRicker_Phase1_Age01p_ParameterSummary.csv", row.names = 1)
+head(param.summary)
+```
+
+***covsummary***: Load covariate summaries: mean, standard deviation, min/max raw values, and min/max z-scored (standardized) values The model was fit with centered/scaled covariate data (i.e., z-scores, to make effect sizes comparable). Thus, environmental input data (to make predictions) needs to be standardized on the same scale. Also use min/max to get range for sliders/inputs.
+
+*Covariate definitions and units:*
+
+* jld_rampdur: duration of ramp down (days)
+* jld_rampratemindoy: timing of ramp down (day of calendar year, i.e., days after Dec. 31)
+* jld_winvar: managed winter flow variation (units obscure)
+* jld_summean: managed summer mean flow (cubic feet per second)
+* jld_peakmag: magnitude of managed peak spring flows (cfs)
+* jld_peaktime: timing of managed peak spring flows (day of brood year, i.e., days after Aug. 31)
+* natq_peakmag: magnitude of natural peak spring flows (cfs)
+* natq_peaktime: timing of natural peak spring flows (day of brood year, i.e., days after Aug. 31)
+* temp_falmean: mean autumn air temperature, Sept-Nov (deg. C)
+* temp_winmean: mean winter air temperature, Dec-Feb (deg. C)
+* temp_sprmean: mean spring air temperature, Mar-Apr (deg. C)
+* temp_summean: mean summer air temperature, Jun-Aug (deg. C)
+
+```{r eval=FALSE}
+# This does not get run...for JBaldock use only
+covsrc_jldq_summary <- read_csv("Data/Derived/ManagedFlow_SummaryMeanSD_1967-2022.csv")
+covsrc_natq_summary <- read_csv("Data/Derived/NaturalFlow_SummaryMeanSD_1975-2022.csv")
+covsrc_expq_summary <- read_csv("Data/Derived/ExperiencedFlow_SummaryMeanSD_1975-2022.csv")
+covsrc_temp_summary <- read_csv("Data/Derived/Temperature_SummaryMeanSD_1967-2022.csv")
+covsummary <- rbind(covsrc_jldq_summary[c(1,2,6:9),], covsrc_natq_summary[c(6:7),], covsrc_temp_summary)
+write_csv(covsummary, "Projections/Covariates_SummaryMeanSD_forProjections.csv")
+```
+```{r}
+covsummary <- read_csv("Projections/Covariates_SummaryMeanSD_forProjections.csv")
+datatable(covsummary %>% mutate(across(c(mean, sd, min_raw, max_raw, min_zscore, max_zscore), round, 3)))
+```
+
+
+***airtemp***: Future air temperature projections summarized from raw GCM data provided by Pramod Adhikari (University of Wyoming, WY-ACT)...to enable future projections under baseline warming trends.
+```{r}
+airtemp <- read_csv("Data/Derived/SeasonalMeanAirTemp_Summarized_1980-2099.csv")
+head(airtemp)
+```
+
+
+## Map Sites
+
+Map the approximate mid-points of WGFD redd counts monitoring reaches
+```{r}
+reddlocs_sp <- st_as_sf(reddctsumm, coords = c("long", "lat"), crs = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84")
+mapview(reddlocs_sp)
+```
+
+## Control Panel
+
+Do not change these parameters as they are specific to the fitted model and data
+```{r}
+n.pops <- 13 # number of populations
+n.covars <- 14 # number of covariates in model
+popshort <- c("THCH", "BLKT", "BLCR", "COCA", "FISH", "FLAT", "LTBC", "LOBC", "NOWL", "PRCE", "SRSC", "SPRG", "UPBC") # abbreviated population names
+poplong <- c("Three Channel Spring", "Blacktail Spring", "Blue Crane Creek", "Cowboy Cabin Spring", "Fish Creek", "Flat Creek", "Little Bar BC Spring", "Lower Bar BC Spring", "Nowlin Creek", "Price Spring", "Snake River Side Channel", "Spring Creek", "Upper Bar BC Spring")
+```
+
+These can be changed depending on what you are interested in doing with future projections (for time series)
+```{r}
+n.years <- 50 # number of years to run projections
+n.sims <- 100 # number of simulations/iterations (greater number of simulations will better account for uncertainty and predictions will be less biased, but more simulations takes longer to run. Ideally, you would use all the MCMC samples (n = 3000) but this would take forever)
+startyear <- 2020 # first year of projections
+```
+
+
+## Parameter Summaries
+
+View parameter summary tables: mean, standard deviation, and quantiles of estimated parameter(s) of interest. To export any of the tables returned below, simply use the function write_csv(x, path = ""), replacing x with the table of interest specifying the file path as a character vector. 
+
+
+Global intrinsic rate of productivity (mu.A), population specific rates (A), and among-population standard deviation (sigma.A)
+```{r}
+datatable(param.summary[grepl("A", row.names(param.summary)),])
+```
+
+
+Population specific strength of density dependence (Ricker b)
+```{r}
+datatable(param.summary[grepl("B", row.names(param.summary)),])
+```
+
+
+Global covariate effects
+```{r}
+datatable(param.summary[grepl("mu.coef", row.names(param.summary)),])
+```
+
+
+Population-specific covariate effects
+```{r}
+tmp <- param.summary[grepl("coef", row.names(param.summary)),]
+datatable(tmp[!grepl(c("mu|sigma"), row.names(tmp)),])
+```
+
+
+Among population standard deviation in covariate effects
+```{r}
+datatable(param.summary[grepl("sigma.coef", row.names(param.summary)),])
+```
+
+
+Age-0/1 proportionality in covariate effects
+```{r}
+tmp <- param.summary[grepl("p", row.names(param.summary)),]
+datatable(tmp[!grepl(c("logpred|phi|sigma"), row.names(tmp)),])
+```
+
+
+Observation and process error
+```{r}
+datatable(param.summary[c("sigma.oe"),])
+```
+
+
+Population specific process error
+```{r}
+datatable(param.summary[grepl("sigma.pe", row.names(param.summary)),])
+```
+
+
+Population specific autocorrelation term
+```{r}
+param.summary[grepl("phi", row.names(param.summary)),]
+```
+
+
+
+## Scenarios
+
+Set up scenarios for "static" scenario calculations, i.e., calculate productivity (Ricker a, ln recruits per spawner), recruitment, and Ricker stock-recruit curves under long-term average conditions and future *discrete* changes in select covariates
+
+How many MCMC samples are there? (This sets the maximum number of simulations)
+```{r}
+dim(Mcmcdat)[1]
+```
+
+Set the number of simulations
+```{r}
+n.simsss <- 1000
+```
+
+Get projected seasonal air temperature in 2050 and convert to z-scores based on *covsummary* (for static scenarios)
+```{r}
+at_fal_2050 <- (unlist(airtemp %>% filter(type == "corrected", season == "fal", year == 2050) %>% select(temp_avg)) - unlist(covsummary[9,"mean"])) / unlist(covsummary[9,"sd"])
+at_win_2050 <- (unlist(airtemp %>% filter(type == "corrected", season == "win", year == 2050) %>% select(temp_avg)) - unlist(covsummary[10,"mean"])) / unlist(covsummary[10,"sd"])
+at_spr_2050 <- (unlist(airtemp %>% filter(type == "corrected", season == "spr", year == 2050) %>% select(temp_avg)) - unlist(covsummary[11,"mean"])) / unlist(covsummary[11,"sd"])
+at_sum_2050 <- (unlist(airtemp %>% filter(type == "corrected", season == "sum", year == 2050) %>% select(temp_avg)) - unlist(covsummary[12,"mean"])) / unlist(covsummary[12,"sd"])
+```
+
+Calculate changes in natural and managed flow for static scenarios
+```{r}
+# 2 weeks early: May 21 (-1.18 standard deviations)
+early_runoff <- ((unlist(covsummary[8,"mean"]) - 14) - unlist(covsummary[8,"mean"])) / unlist(covsummary[8,"sd"])
+# Early peak release: May 21, matched to natural early runoff (-1.41 standard deviations)
+early_release <- ((unlist(covsummary[8,"mean"]) - 14) - unlist(covsummary[6,"mean"])) / unlist(covsummary[6,"sd"])
+# Late peak release: June 27, 2 weeks after long-term average (+0.88 standard deciations)
+late_release <- ((unlist(covsummary[6,"mean"]) + 14) - unlist(covsummary[6,"mean"])) / unlist(covsummary[6,"sd"])
+# early ramp down: Sept 17, 1 week before long term average (-1.26 standard deviations)
+early_rampdown <- ((unlist(covsummary[2,"mean"]) - 10) - unlist(covsummary[2,"mean"])) / unlist(covsummary[2,"sd"])
+# late ramp down: Oct 7, 1 week after long term average (+1.26 standard deviations)
+late_rampdown <- ((unlist(covsummary[2,"mean"]) + 10) - unlist(covsummary[2,"mean"])) / unlist(covsummary[2,"sd"])
+```
+
+
+Calculate seasonal warming rates between 2020 and 2050 using linear models: warming is fastest in spring and summer, followed by autumn, and slowest in winter.
+```{r}
+mod1 <- summary(lm(temp_avg ~ year, airtemp %>% filter(type == "corrected", season == "fal", year %in% c(2020:2050))))
+mod2 <- summary(lm(temp_avg ~ year, airtemp %>% filter(type == "corrected", season == "win", year %in% c(2020:2050))))
+mod3 <- summary(lm(temp_avg ~ year, airtemp %>% filter(type == "corrected", season == "spr", year %in% c(2020:2050))))
+mod4 <- summary(lm(temp_avg ~ year, airtemp %>% filter(type == "corrected", season == "sum", year %in% c(2020:2050))))
+
+tibble(season = c("autumn", "winter", "spring", "summer"),
+       warmingrate = c(round(coefficients(mod1)[2,1], digits = 4),
+                       round(coefficients(mod2)[2,1], digits = 4),
+                       round(coefficients(mod3)[2,1], digits = 4),
+                       round(coefficients(mod4)[2,1], digits = 4)))
+```
+
+Define scenarios:
+```{r}
+# 1. Baseline warming (through 2050)
+covarvec1 <- c(0,0,0,0,0,0,0,0,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,0)
+
+# 2. Scen 1 + early peak runoff 
+covarvec2 <- c(0,0,0,0,0,0,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,0)
+
+# 3. Scen 2 + early release
+covarvec3 <- c(0,0,0,0,0,early_release,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,early_release*early_runoff)
+
+# 4. Scen 2 + late release
+covarvec4 <- c(0,0,0,0,0,late_release,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,late_release*early_runoff)
+
+# 5. Scen 2 + early ramp down
+covarvec5 <- c(0,early_rampdown,0,0,0,0,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,0)
+
+# 6. Scen 2 + late ramp down
+covarvec6 <- c(0,late_rampdown,0,0,0,0,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,0)
+
+# combine scenarios into list
+scenario_list <- list(covarvec1, covarvec2, covarvec3, covarvec4, covarvec5, covarvec6)
+```
+
+
+## Productivity
+
+"Simple" projections show change in productivity, ln(R/S) or "Ricker a", given a specified change in environmental variables relative to baseline (long-term average) conditions. 
+
+### Interactive
+
+For simplicity, only allow users to toggle covariates with "weak" (75% credible interval does not include 0) or "strong" (95% credible interval does not include 0) effects on productivity. 
+
+This doesn't evaluate, as interactivity is not supported in Quarto/Rmarkdown, but you can download this script and run in RStudio to get a sense of how this would function. 
+```{r eval=FALSE}
+ChangeProdBP <- function(z_jld_rampratemindoy, z_jld_peaktime, z_natq_peaktime, z_temp_winmean, z_temp_sprmean, z_temp_summean) {
+  # mean global and population-specific Ricker a under average conditions
+  #A.mu <- param.summary["mu.A",1]
+  #A.pop <- c()
+  #for (i in 1:n.pops) {
+  #  A.pop[i] <- param.summary[paste("A[", i, "]", sep = ""),1]
+  #}
+  # carrying capacity with covariate effects and model uncertainty
+  A.mu.change <- unlist(Mcmcdat[,"mu.coef[2]"]*z_jld_rampratemindoy + Mcmcdat[,"mu.coef[6]"]*z_jld_peaktime + Mcmcdat[,"mu.coef[8]"]*z_natq_peaktime + Mcmcdat[,"mu.coef[10]"]*z_temp_winmean + Mcmcdat[,"mu.coef[11]"]*z_temp_sprmean + Mcmcdat[,"mu.coef[12]"]*z_temp_summean + Mcmcdat[,"mu.coef[14]"]*z_jld_peaktime*z_natq_peaktime)
+  A.pop.change <- list()
+  for (i in 1:n.pops) {
+    A.pop.change[[i]] <- unlist(Mcmcdat[,paste("coef[",i,",2]", sep = "")]*z_jld_rampratemindoy + Mcmcdat[,paste("coef[",i,",6]", sep = "")]*z_jld_peaktime + Mcmcdat[,paste("coef[",i,",8]", sep = "")]*z_natq_peaktime + Mcmcdat[,paste("coef[",i,",10]", sep = "")]*z_temp_winmean + Mcmcdat[,paste("coef[",i,",11]", sep = "")]*z_temp_sprmean + Mcmcdat[,paste("coef[",i,",12]", sep = "")]*z_temp_summean + Mcmcdat[,paste("coef[",i,",14]", sep = "")]*z_jld_peaktime*z_natq_peaktime)
+  }
+  simtib <- tibble(population = c(rep("Global", times = dim(Mcmcdat)[1]), rep(popshort, each = dim(Mcmcdat)[1])),
+                   outcome = c(A.mu.change, unlist(A.pop.change))) %>% mutate(population = factor(population, levels = c("Global", popshort)))
+  # plot boxplot with line for reference
+  boxplot(outcome ~ population, data = simtib, xlab = "Population", ylab = "Change in productivity, ln(R/S)", las = 2, ylim = c(-5,5), col = c("red", rep("grey", times = n.pops)))
+  abline(h = 0, lty = 2)
+}
+manipulate(ChangeProdBP(z_jld_rampratemindoy, z_jld_peaktime, z_natq_peaktime, z_temp_winmean, z_temp_sprmean, z_temp_summean), 
+           z_jld_rampratemindoy = slider(min = covsummary$min_zscore[2], covsummary$max_zscore[2], initial = 0, step = 0.1), 
+           z_jld_peaktime = slider(min = covsummary$min_zscore[6], covsummary$max_zscore[6], initial = 0, step = 0.1), 
+           z_natq_peaktime = slider(min = covsummary$min_zscore[8], covsummary$max_zscore[8], initial = 0, step = 0.1), 
+           z_temp_winmean = slider(min = covsummary$min_zscore[10], covsummary$max_zscore[10], initial = 0, step = 0.1), 
+           z_temp_sprmean = slider(min = covsummary$min_zscore[11], covsummary$max_zscore[11], initial = 0, step = 0.1), 
+           z_temp_summean = slider(min = covsummary$min_zscore[12], covsummary$max_zscore[12], initial = 0, step = 0.1))
+```
+
+
+### Static
+
+Vector to store estimated productivity
+```{r}
+productivity_list <- list()
+```
+
+Run "simple" projections, just showing change in A
+```{r}
+for (i in 1:length(scenario_list)) {
+  covarvec <- scenario_list[[i]]
+  prodvec <- c()
+  for (j in 1:n.simsss) {
+    anncoveff <- c()
+    for (c in 1:n.covars) { anncoveff[c] <- unlist(Mcmcdat[j,paste("mu.coef[", c, "]", sep = "")]) * covarvec[c] }
+    prodvec[j] <- sum(anncoveff) 
+  }
+  productivity_list[[i]] <- prodvec
+  print(i)
+}
+prodtib <- tibble(scenario = rep(c("sc1", "sc2", "sc3", "sc4", "sc5", "sc6"), each = n.simsss),
+                  productivity = unlist(productivity_list))
+```
+
+Assign colors based on change in median productivity
+```{r}
+mycols <- rev(hcl.colors(11, "Blue-Red 2"))
+mypal <- colorRampPalette(mycols)
+protib_summ <- prodtib %>% group_by(scenario) %>% summarise(median = median(productivity, na.rm = TRUE)) %>%
+  mutate(cols = mypal(100)[as.numeric(cut(median, breaks = seq(from = -0.5, to = 0.5, by = 0.01)))])
+```
+
+Plot
+```{r}
+par(mar = c(4,4,1,1), mgp = c(2.5,1,0))
+boxplot(productivity ~ scenario, prodtib, xlab = "Scenario", ylab = "Change in productivity", lty = 1, axes = FALSE, col = protib_summ$cols)
+abline(h = 0, lwd = 1, lty = 2)
+axis(1, at = c(1:6), labels = c(1:6))
+axis(2)
+
+# par(mgp = c(2.5,4.75,0))
+# axis(1, at = c(1:6), labels = c("(1)\nProjected\nwarming\n(2050)\n ", 
+#                                 "(2)\nWarming (2050)\nEarly runoff (2 wks)\n ", 
+#                                 "(3)\nWarming (2050)\nEarly runoff (2 wks)\nEarly release (matched)",
+#                                 "(4)\nWarming (2050)\nEarly runoff (2 wks)\nLate release (2 wks)",
+#                                 "(5)\nWarming (2050)\nEarly runoff (2 wks)\nEarly ramp-down (1 wk)",
+#                                 "(6)\nWarming (2050)\nEarly runoff (2 wks)\nLate ramp-down (1 wk)"))
+# par(mgp = c(2.5,1,0))
+# axis(2)
+```
+
+
+## Recruitment
+
+The "simple" projections of change in productivity (above) fail to capture dramatic differences in redd densities among streams, which range from 14.9 redds/km in Blue Crane Creek to 254.7 redds per km in Blacktail Spring. Management actions based on projections of among-population mean productivity would act to benefit all populations equally, implicitly valuing population diversity (i.e., preserving as many populations as possible). However, managers may also wish to understand how alternative management actions affect total recruitment (redd density *summed* across populations), which effectively values populations according to their size (i.e., management actions may be favored if they disproportionately benefit a large population, even if it comes at a cost to a smaller population). In this section, I calculate changes in recruitment for each population and summed across all populations under alternative scenarios of climate change and water management (*sensu* Murdoch et al. 2024). This approach also accounts for population-level variation in the effect of environmental variables on productivity.
+
+As above, only vary environmental variables that were found to have either weak or strong effects on productivity
+
+
+#### Interactive
+
+This does not evaluate in Quarto, but can be run in RStudio
+```{r eval=FALSE}
+ChangeRecBP <- function(z_jld_rampratemindoy, z_jld_peaktime, z_natq_peaktime, z_temp_winmean, z_temp_sprmean, z_temp_summean) {
+  # empty matrix to store recruitment predictions
+  R.pop.change <- matrix(data = NA, nrow = dim(Mcmcdat)[1], ncol = n.pops)
+  # fill matrix
+  for (i in 1:n.pops) {
+    # calculate effect of covariates
+    coveff <- Mcmcdat[,paste("coef[",i,",2]", sep = "")]*z_jld_rampratemindoy + Mcmcdat[,paste("coef[",i,",6]", sep = "")]*z_jld_peaktime + Mcmcdat[,paste("coef[",i,",8]", sep = "")]*z_natq_peaktime + Mcmcdat[,paste("coef[",i,",10]", sep = "")]*z_temp_winmean + Mcmcdat[,paste("coef[",i,",11]", sep = "")]*z_temp_sprmean + Mcmcdat[,paste("coef[",i,",12]", sep = "")]*z_temp_summean + Mcmcdat[,paste("coef[",i,",14]", sep = "")]*z_jld_peaktime*z_natq_peaktime
+    # Calculate change in recruitment (relative to long-term median redd density)
+    R.pop.change[,i] <- unlist(reddctsumm$med.redds[i] * exp(Mcmcdat[,paste("A[",i,"]", sep = "")] - (Mcmcdat[,paste("B[",i,"]", sep = "")] * reddctsumm$med.redds[i]) + coveff)) - reddctsumm$med.redds[i]
+  }
+  # sum changes in recruitment across populations
+  R.pop.change <- cbind(rowSums(R.pop.change), R.pop.change)
+  colnames(R.pop.change) <- c("Total", popshort)
+  # plot
+  boxplot(R.pop.change, las = 2, ylim = c(-1000,1000), col = c("red", rep("grey", times = n.pops)))
+  abline(h = 0, lty = 2)
+}
+
+
+manipulate(ChangeRecBP(z_jld_rampratemindoy, z_jld_peaktime, z_natq_peaktime, z_temp_winmean, z_temp_sprmean, z_temp_summean), 
+           z_jld_rampratemindoy = slider(min = covsummary$min_zscore[2], covsummary$max_zscore[2], initial = 0, step = 0.1), 
+           z_jld_peaktime = slider(min = covsummary$min_zscore[6], covsummary$max_zscore[6], initial = 0, step = 0.1), 
+           z_natq_peaktime = slider(min = covsummary$min_zscore[8], covsummary$max_zscore[8], initial = 0, step = 0.1), 
+           z_temp_winmean = slider(min = covsummary$min_zscore[10], covsummary$max_zscore[10], initial = 0, step = 0.1), 
+           z_temp_sprmean = slider(min = covsummary$min_zscore[11], covsummary$max_zscore[11], initial = 0, step = 0.1), 
+           z_temp_summean = slider(min = covsummary$min_zscore[12], covsummary$max_zscore[12], initial = 0, step = 0.1))
+```
+
+
+### Static
+
+Vector to store estimated recruitment
+```{r}
+recruitment_array <- array(data = NA, dim = c(n.simsss, n.pops, length(scenario_list)))
+recruitment_summed <- matrix(data = NA, nrow = n.simsss, ncol = length(scenario_list))
+```
+
+Run recruitment projections
+```{r}
+# calculation change in recruitment for each population
+for (i in 1:length(scenario_list)) {
+  covarvec <- scenario_list[[i]]
+  for (j in 1:n.pops) {
+    coveff <- 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",1]", sep = "")]*covarvec[1] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",2]", sep = "")]*covarvec[2] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",3]", sep = "")]*covarvec[3] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",4]", sep = "")]*covarvec[4] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",5]", sep = "")]*covarvec[5] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",6]", sep = "")]*covarvec[6] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",7]", sep = "")]*covarvec[7] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",8]", sep = "")]*covarvec[8] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",9]", sep = "")]*covarvec[9] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",10]", sep = "")]*covarvec[10] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",11]", sep = "")]*covarvec[11] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",12]", sep = "")]*covarvec[12] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",13]", sep = "")]*covarvec[13] + 
+      Mcmcdat[1:n.simsss,paste("coef[",i,",14]", sep = "")]*covarvec[14]
+    recruitment_array[,j,i] <- unlist(reddctsumm$med.redds[j] * exp(Mcmcdat[1:n.simsss,paste("A[",j,"]", sep = "")] - (Mcmcdat[1:n.simsss,paste("B[",j,"]", sep = "")] * reddctsumm$med.redds[j]) + coveff)) - reddctsumm$med.redds[j]
+  }
+}
+# sum over populations
+for (i in 1:dim(recruitment_array)[3]) {
+  recruitment_summed[,i] <- rowSums(recruitment_array[,,i])
+}
+rectib <- tibble(scenario = rep(c("sc1", "sc2", "sc3", "sc4", "sc5", "sc6"), each = n.simsss),
+                 recruitment = c(recruitment_summed))
+```
+
+Assign colors based on change in median productivity
+```{r}
+mycols <- rev(hcl.colors(11, "Blue-Red 2"))
+mypal <- colorRampPalette(mycols)
+rectib_summ <- rectib %>% group_by(scenario) %>% summarise(median = median(recruitment, na.rm = TRUE)) %>%
+  mutate(cols = mypal(100)[as.numeric(cut(median, breaks = seq(from = -1000, to = 1000, by = 100)))])
+```
+
+Plot
+```{r}
+par(mar = c(4,4,1,1), mgp = c(2.5,1,0))
+boxplot(recruitment ~ scenario, rectib, xlab = "Scenario", ylab = "Change in recruitment (redds/km)", lty = 1, axes = FALSE, ylim = c(-1000, 5000))
+abline(h = 0, lwd = 1, lty = 2)
+axis(1, at = c(1:6), labels = c(1:6))
+axis(2)
+```
+
+
+## Rule Curves
+
+Calculate population-specific Ricker stock-recruit curves and show how these change under alternative climate and water management scenarios.
+
+
+### Interactive
+
+As above, this does not evaluate in Quarto
+```{r eval=FALSE}
+Ricker <- function(z_jld_rampratemindoy, z_jld_peaktime, z_natq_peaktime, z_temp_winmean, z_temp_sprmean, z_temp_summean, population) {
+  j <- population
+  # necessary vectors
+  npoints <- 500
+  maxsp <- 400
+  spawners <- seq(from = 0, to = maxsp, length.out = npoints)
+  recruits <- vector(length = npoints)
+  # calculate recruitment with covariate effects
+  for (i in 1:npoints) { recruits[i] <- exp(log(spawners[i]) + param.summary[paste("A[", j, "]", sep = ""),1] - param.summary[paste("B[", j, "]", sep = ""),1]*exp(log(spawners[i])) + param.summary[paste("coef[", j, ",2]", sep = ""),1]*z_jld_rampratemindoy + param.summary[paste("coef[", j, ",6]", sep = ""),1]*z_jld_peaktime + param.summary[paste("coef[", j, ",8]", sep = ""),1]*z_natq_peaktime + param.summary[paste("coef[", j, ",10]", sep = ""),1]*z_temp_winmean + param.summary[paste("coef[", j, ",11]", sep = ""),1]*z_temp_sprmean + param.summary[paste("coef[", j, ",12]", sep = ""),1]*z_temp_summean) }
+  # carrying capacity under average conditions
+  # K.mu <- (param.summary["mu.A",1]) / param.summary["mu.B",1]
+  # carrying capacity with covariate effects
+  # K <- (param.summary["mu.A",1] + param.summary["mu.coef[1]",1]*x1 + param.summary["mu.coef[2]",1]*x2 + param.summary["mu.coef[3]",1]*x1*x2) / param.summary["mu.B",1]
+  # plot stock-recruitment Ricker curve with lines and text denoting change in carrying capacity
+  plot(x = spawners, y = recruits, type = "l", xaxs = "i", yaxs = "i", xlim = c(0,maxsp), ylim = c(0,maxsp), lwd = 2, col = "blue", xlab = "Spawners (redds/km)", ylab ="Recruits (redds/km)", main = poplong[j])
+  # arrows(x0 = K, y0 = -50, x1 = K, y1 = K, col = "blue", length = 0, lwd = 0.75)
+  # text(x = K+1, y = 5, labels = paste(round((K/K.mu)*100), "%", sep = ""), col = "blue", srt = 90)
+  abline(a = 0, b = 1, lty = 2)
+}
+
+
+manipulate(Ricker(z_jld_rampratemindoy, z_jld_peaktime, z_natq_peaktime, z_temp_winmean, z_temp_sprmean, z_temp_summean, population), 
+           population = picker("Three Channel Spring" = 1, 
+                               "Blacktail Spring" = 2,
+                               "Blue Crane Creek" = 3,
+                               "Cowboy Cabin Spring" = 4,
+                               "Fish Creek" = 5,
+                               "Flat Creek" = 6,
+                               "Little Bar BC Spring" = 7,
+                               "Lower Bar BC Spring" = 8,
+                               "Nowlin Creek" = 9,
+                               "Price Spring" = 10,
+                               "Snake River Side Channel" = 11,
+                               "Spring Creek" = 12,
+                               "Upper Bar BC Spring" = 13),
+           z_jld_rampratemindoy = slider(min = covsummary$min_zscore[2], covsummary$max_zscore[2], initial = 0, step = 0.1), 
+           z_jld_peaktime = slider(min = covsummary$min_zscore[6], covsummary$max_zscore[6], initial = 0, step = 0.1), 
+           z_natq_peaktime = slider(min = covsummary$min_zscore[8], covsummary$max_zscore[8], initial = 0, step = 0.1), 
+           z_temp_winmean = slider(min = covsummary$min_zscore[10], covsummary$max_zscore[10], initial = 0, step = 0.1), 
+           z_temp_sprmean = slider(min = covsummary$min_zscore[11], covsummary$max_zscore[11], initial = 0, step = 0.1), 
+           z_temp_summean = slider(min = covsummary$min_zscore[12], covsummary$max_zscore[12], initial = 0, step = 0.1))
+
+```
+
+
+
+
+
+
+

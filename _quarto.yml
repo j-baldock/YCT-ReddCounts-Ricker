@@ -28,6 +28,7 @@ book:
     - part: "Projections"
       chapters:
         - ClimateProjectionData.qmd
+        - FutureProjections.qmd
 
 
 
