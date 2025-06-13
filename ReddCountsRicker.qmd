@@ -90,7 +90,7 @@ dat <- dat %>%
 
 Create summary table
 ```{r}
-summary.dat <- dat %>% filter(!is.na(reddsperkm)) %>% group_by(stream) %>% summarize('lat' = unique(lat), 'long' = unique(long), 'startyr' = min(year), 'endyr' = max(year), 'n.year' = length(unique(year))) %>% arrange(stream) %>% ungroup()
+summary.dat <- dat %>% filter(!is.na(reddsperkm)) %>% group_by(stream) %>% summarize('lat' = unique(lat), 'long' = unique(long), 'startyr' = min(year), 'endyr' = max(year), 'n.year' = length(unique(year)), "med.redds" = median(reddsperkm)) %>% arrange(stream) %>% ungroup()
 datatable(summary.dat)
 write_csv(summary.dat, "ReddCounts_DataSummary.csv")
 ```
@@ -687,7 +687,10 @@ for(i in 1:length(McmcList)) {
   McmcList[[i]] = as.mcmc(modelout$sims.array[,i,])
 }
 # rbind MCMC samples from 3 chains 
-Mcmcdat <- rbind(McmcList[[1]], McmcList[[2]], McmcList[[3]])
+Mcmcdat <- rbind(McmcList[[1]], McmcList[[2]], McmcList[[3]], McmcList[[4]], McmcList[[5]], 
+                 McmcList[[6]], McmcList[[7]], McmcList[[8]], McmcList[[9]], McmcList[[10]], 
+                 McmcList[[11]], McmcList[[12]], McmcList[[13]], McmcList[[14]], McmcList[[15]], 
+                 McmcList[[16]], McmcList[[17]], McmcList[[18]], McmcList[[19]], McmcList[[20]])
 param.summary <- as.data.frame(modelout$summary)
 
 # save model output
