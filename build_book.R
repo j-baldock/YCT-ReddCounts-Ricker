@@ -5,3 +5,6 @@ library(knitr)
 
 # Render all
 quarto::quarto_render(output_format = "html")
+
+
+quarto::quarto_render("ReddCountsRicker.qmd", output_format = "html", cache_refresh = TRUE)

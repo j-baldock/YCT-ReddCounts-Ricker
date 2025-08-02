@@ -241,7 +241,7 @@ dim(covars0)
 dim(covars1)
 ```
 
-Add interaction and/or squared terms, if applicable
+Add interaction, squared terms, and/or age-specific effects (if applicable).
 ```{r}
 # names.covars0 <- c(names.covars0, "z_int_peaktime", "z_int_peakmag") # add names for additional terms
 # names.covars1 <- c(names.covars1, "z_int_peaktime", "z_int_peakmag") # add names for additional terms
@@ -249,10 +249,32 @@ Add interaction and/or squared terms, if applicable
 # covars1 <- abind::abind(covars1, covars1[,,6]*covars1[,,9], covars1[,,5]*covars1[,,8], along = 3)
 # n.covars <- length(names.covars0)
 
-names.covars0 <- c(names.covars0, "z_int_peakmag", "z_int_peaktime") # add names for additional terms
-names.covars1 <- c(names.covars1, "z_int_peakmag", "z_int_peaktime") # add names for additional terms
-covars0 <- abind::abind(covars0, covars0[,,5]*covars0[,,7], covars0[,,6]*covars0[,,8], along = 3)
-covars1 <- abind::abind(covars1, covars1[,,5]*covars1[,,7], covars0[,,6]*covars0[,,8], along = 3)
+# names.covars0 <- c(names.covars0, "z_int_peakmag", "z_int_peaktime") # add names for additional terms
+# names.covars1 <- c(names.covars1, "z_int_peakmag", "z_int_peaktime") # add names for additional terms
+# covars0 <- abind::abind(covars0, covars0[,,5]*covars0[,,7], covars0[,,6]*covars0[,,8], along = 3)
+# covars1 <- abind::abind(covars1, covars1[,,5]*covars1[,,7], covars0[,,6]*covars0[,,8], along = 3)
+# n.covars <- length(names.covars0)
+
+# add terms to covariate name vectors
+names.covars0 <- c(names.covars0, "z_int_peaktime", "z_jld_peakmag_1") # add names for additional terms
+names.covars0[5] <- "z_jld_peakmag_0"
+names.covars1 <- c(names.covars1, "z_int_peaktime", "z_jld_peakmag_1") # add names for additional terms
+names.covars1[5] <- "z_jld_peakmag_0"
+
+# add peak timing interaction and age-1 managed peak magnitude
+covars0 <- abind::abind(covars0, covars0[,,6]*covars0[,,8], covars1[,,5], along = 3)
+covars1 <- abind::abind(covars1, covars0[,,6]*covars0[,,8], covars1[,,5], along = 3)
+
+# force to age-0 managed flow
+covars1[,,5] <- covars0[,,5]
+
+# rearrange order for plotting
+names.covars0 <- names.covars0[c(1:5,14,6:13)]
+names.covars1 <- names.covars1[c(1:5,14,6:13)]
+covars0 <- covars0[,,c(1:5,14,6:13)]
+covars1 <- covars1[,,c(1:5,14,6:13)]
+
+# check
 n.covars <- length(names.covars0)
 ```
 
@@ -596,24 +618,24 @@ mod_01pb <- jags.parallel(data = jags.data, inits = NULL, parameters.to.save = j
                           model.file = "JAGS Models/Ricker_Hierarchical_StateSpace_OEestimated_Covars_Proportional.txt", 
                           n.chains = 20, n.thin = 200, n.burnin = 10000, n.iter = 60000, DIC = TRUE)
 MCMCtrace(mod_01pb, ind = TRUE, params = c("A", "B", "mu.A", "sigma.A", "sigma.oe", "sigma.pe", "mu.coef", "sigma.coef", "p", "phi"),
-          filename = "Model output/MCMCtrace_ReddCountsRicker_Test_Age01p_winvar.pdf") # write out traceplots
+          filename = "Model output/MCMCtrace_ReddCountsRicker_Test_Age01p_winvar_AgeSpecMgdPeakMag.pdf") # write out traceplots
 Sys.time() - st
 beep()
 ```
 
 Save model output as RDS file
 ```{r eval=FALSE}
-saveRDS(mod_01pb, "Model output/ReddCountsRicker_Phase1_Age01p_winvar.RDS")
+saveRDS(mod_01pb, "Model output/ReddCountsRicker_Phase1_Age01p_winvar_AgeSpecMgdPeakMag.RDS")
 ```
 
 Read in model RDS file
 ```{r cache=FALSE}
-mod_01pb <- readRDS("Model output/ReddCountsRicker_Phase1_Age01p_winvar.RDS")
+mod_01pb <- readRDS("Model output/ReddCountsRicker_Phase1_Age01p_winvar_AgeSpecMgdPeakMag.RDS")
 ```
 
 Check R-hat values
 ```{r}
-mod_01pb$BUGSoutput$summary[,8][mod_01pb$BUGSoutput$summary[,8] > 1.05]
+mod_01pb$BUGSoutput$summary[,8][mod_01pb$BUGSoutput$summary[,8] > 1.01]
 ```
 
 
@@ -720,10 +742,10 @@ box(bty = "o")
 ```
 
 ```{r include=FALSE}
-jpeg("Figures/Model Diagnostics/ReddCounts_Ricker_CovarModel_Age01_ResidHist.jpg", units = "in", width = 4.5, height = 4.5, res = 1500)
+jpeg("Figures/Model Diagnostics/ReddCounts_Ricker_CovarModel_Age01_ResidHist.jpg", units = "in", width = 6, height = 4, res = 1500)
 par(mar = c(4,4,1,1), mgp = c(2.5,1,0))
 hist((ppdat_obs - ppdat_exp), main = "", xlab = "Observed - Expected")
-legend("topright", bty = "n", legend = paste("Median Resid. = ", round(median((ppdat_obs - ppdat_exp)), digits = 4), sep = ""))
+legend("topright", bty = "n", legend = paste("Median residual = ", round(median((ppdat_obs - ppdat_exp)), digits = 4), sep = ""))
 abline(v = median(unlist(ppdat_obs - ppdat_exp)), col = "red", lwd = 2)
 box(bty = "o")
 dev.off()
@@ -911,18 +933,18 @@ for (j in 1:nrow(rec_raw)) {
     try(logpred2 <- Mcmcdat[,paste("logpred2[",j,",",i,"]", sep = "")])
     
     try(N_med[j,i] <- quantile(exp(loglatent), prob = 0.50))
-    try(N_low[j,i] <- quantile(exp(loglatent), prob = 0.05))
-    try(N_upp[j,i] <- quantile(exp(loglatent), prob = 0.95))
+    try(N_low[j,i] <- quantile(exp(loglatent), prob = 0.025))
+    try(N_upp[j,i] <- quantile(exp(loglatent), prob = 0.975))
     
     try(P_med[j,i] <- quantile(exp(logpred2), prob = 0.50))
-    try(P_low[j,i] <- quantile(exp(logpred2), prob = 0.05))
-    try(P_upp[j,i] <- quantile(exp(logpred2), prob = 0.95))
+    try(P_low[j,i] <- quantile(exp(logpred2), prob = 0.025))
+    try(P_upp[j,i] <- quantile(exp(logpred2), prob = 0.975))
     
   }
 }
 ```
 
-Set up and check color palette for color blindess accessibility
+Set up and check color palette for color blindness accessibility
 ```{r}
 rec <- rec_raw
 popshort <- c("THCH", "BLKT", "BLCR", "COCA", "FISH", "FLAT", "LTBC", "LOBC", "NOWL", "PRCE", "SRSC", "SPRG", "UPBC")
@@ -966,7 +988,7 @@ legend("center", legend = c("Observations", "Latent states", "Predictions"), pch
 ```
 
 ```{r include = FALSE}
-jpeg("Figures/Time Series/ReddCountsRicker_Covars_Age01p_TimeSeries_Proportional_90ci.jpg", units = "in", width = 8.5, height = 8.5, res = 1000)
+jpeg("Figures/Time Series/ReddCountsRicker_Covars_Age01p_TimeSeries_Proportional_95ci.jpg", units = "in", width = 8.5, height = 8.5, res = 1000)
 par(mfrow = c(4,4), mgp = c(2,0.6,0), mar = c(1.2, 1.2, 2, 1.2), oma = c(2.5,2.5,0,0))
 for (i in 1:n.pops) {
   plot(exp(rec_raw[i,c(5:55)]) ~ years[i,c(1:51)], type = "n", xlab = "", ylab = "", xlim = c(1970, 2021), ylim = c(0, exp(max(rec_raw[i,], na.rm = T))))
@@ -1023,7 +1045,6 @@ datatable(poptib %>% arrange(cv))
 Coerce to ggs object
 ```{r cache=FALSE}
 mod.gg <- ggs(as.mcmc(topmod), keep_original_order = TRUE)
-popshort <- c("THCH", "BLKT", "BLCR", "COCA", "FISH", "FLAT", "LTBC", "LOBC", "NOWL", "PRCE", "SRSC", "SPRG", "UPBC")
 ```
 
 Remind covariate names...
@@ -1031,20 +1052,32 @@ Remind covariate names...
 names.covars0
 ```
 
-Covariate types and pretty covariate names
+Covariate types and pretty covariate/population names
 ```{r}
-CovType <- factor(c(rep("Managed flow", times = 6), 
+CovType <- factor(c(rep("Managed flow", times = 7), 
                     rep("Natural flow", times = 2), 
                     rep("Temperature", times = 4), 
-                    rep("Interaction", times = 2)),
+                    rep("Interaction", times = 1)),
                   levels = c("Managed flow", "Natural flow", "Temperature", "Interaction"))
 
 # rename covariates
-names.covars.new <- c("Duration of ramp down", "Timing of ramp down", 
-                      "Mgd. winter flow var.", "Mgd. summer mean flow", "Mgd. peak flow mag.", "Mgd. peak flow timing", 
-                      "Nat. peak flow mag.", "Nat. peak flow timing",
-                      "Autumn temperature", "Winter temperature", "Spring temperature", "Summer temperature",
-                      "Mgd. x Nat. peak flow mag.", "Mgd. x Nat. peak flow timing")
+names.covars.new <- c("Duration of ramp down", 
+                      "Timing of ramp down", 
+                      "Mgd. winter flow variation", 
+                      "Mgd. summer mean flow", 
+                      "Mgd. peak flow mag. (0)", 
+                      "Mgd. peak flow mag. (1)", 
+                      "Mgd. peak flow timing", 
+                      "Nat. peak flow magnitude", 
+                      "Nat. peak flow timing",
+                      "Autumn temperature", 
+                      "Winter temperature", 
+                      "Spring temperature", 
+                      "Summer temperature",
+                      "Mgd. x Nat. peak flow timing")
+
+# short population names
+popshort <- c("THCH", "BLKT", "BLCR", "COCA", "FISH", "FLAT", "LTBC", "LOBC", "NOWL", "PRCE", "SRSC", "SPRG", "UPBC")
 ```
 
 Set color palette
@@ -1057,22 +1090,56 @@ mycols <- c("#E69F00", "#56B4E9", "#009E73", "#999999")
 
 #### Global covariate effects
 ```{r fig.width=5.5, fig.height=6}
-ggs_caterpillar(D = mod.gg, family = "mu.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + ylab("Environmental driver") + xlab("Global change in productivity, ln(R/S)") + aes(color = CovType) + scale_color_manual(values = mycols) +
-  geom_vline(xintercept = 0, linetype = "dashed") + scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
+# ggs_caterpillar(D = mod.gg, family = "mu.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) +
+#   theme_bw() + 
+#   ylab("Environmental driver") + 
+#   xlab("Global change in productivity, ln(R/S)") + 
+#   aes(color = CovType) +
+#   scale_color_manual(values = mycols) +
+#   geom_vline(xintercept = 0, linetype = "dashed") + 
+#   scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
+#   theme(legend.position = "top", legend.title = element_blank(), axis.text = element_text(color = "black"),
+#         legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), panel.grid = element_blank()) + 
+#   guides(color = guide_legend(nrow = 2, byrow = TRUE))
+test <- ggs_caterpillar(D = mod.gg, family = "mu.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
+test +
+  theme_bw() + 
+  ylab("Environmental driver") + 
+  xlab("Global change in productivity, ln(R/S)") + 
+  aes(color = CovType) +
+  scale_color_manual(values = mycols) + 
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 8.5, ymax = 10.5), fill = "grey80", color = NA) +
+  geom_vline(xintercept = 0, linetype = "dashed") + 
+  scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
   theme(legend.position = "top", legend.title = element_blank(), axis.text = element_text(color = "black"),
-        legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0)) + 
-  guides(color = guide_legend(nrow = 2, byrow = TRUE))
+        legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), 
+        panel.grid = element_blank(), axis.title = element_text(size = 14)) + 
+  guides(color = guide_legend(nrow = 2, byrow = TRUE)) +
+  geom_point(data = test$data, aes(x = median, y = Parameter), size = 3) +
+  geom_errorbarh(data = test$data, aes(xmin = Low, xmax = High), size = 1.5, height = 0) +
+  geom_errorbarh(data = test$data, aes(xmin = low, xmax = high), height = 0) +
+  geom_point(data = test$data, aes(x = median, y = Parameter), size = 3, shape = 1, color = "black")
 ```
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_GlobalCovariates.jpg", units = "in", width = 5.5, height = 5, res = 1500)
-ggs_caterpillar(D = mod.gg, family = "mu.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + ylab("Environmental driver") + xlab("Global change in productivity, ln(R/S)") + aes(color = CovType) + scale_color_manual(values = mycols) +
-  geom_vline(xintercept = 0, linetype = "dashed") + scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
-  theme(legend.position = "top", legend.title = element_blank(), axis.text = element_text(color = "black"), 
-        legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0)) + 
-  guides(color = guide_legend(nrow = 2, byrow = TRUE))
+test +
+  theme_bw() + 
+  ylab("Environmental driver") + 
+  xlab("Global change in productivity, ln(R/S)") + 
+  aes(color = CovType) +
+  scale_color_manual(values = mycols) + 
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 8.5, ymax = 10.5), fill = "grey87", color = NA) +
+  geom_vline(xintercept = 0, linetype = "solid", size = 0.2) + 
+  scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
+  theme(legend.position = "top", legend.title = element_blank(), axis.text = element_text(color = "black"),
+        legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), 
+        panel.grid = element_blank(), axis.title = element_text(size = 13)) + 
+  guides(color = guide_legend(nrow = 2, byrow = TRUE)) +
+  geom_point(data = test$data, aes(x = median, y = Parameter), size = 4) +
+  geom_errorbarh(data = test$data, aes(xmin = Low, xmax = High), size = 2, height = 0) +
+  geom_errorbarh(data = test$data, aes(xmin = low, xmax = high), height = 0) +
+  geom_point(data = test$data, aes(x = median, y = Parameter), size = 4, shape = 1, color = "black")
 dev.off()
 ```
 
@@ -1081,18 +1148,26 @@ dev.off()
 
 Define colors
 ```{r}
-mycols2 <- c(rep(mycols[1], times = 6), rep(mycols[2], times = 2), 
-             rep(mycols[3], times = 4), rep(mycols[4], times = 2))
+mycols2 <- c(rep(mycols[1], times = 7), rep(mycols[2], times = 2), 
+             rep(mycols[3], times = 4), rep(mycols[4], times = 1))
 ```
 
 Generate plots in a for loop
 ```{r}
 # generate plots in a for loop
 for (i in 1:length(names.covars0)) {
+  test <- ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("coef[", 1:16, ",", i, "]", sep = "")), family = "coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
   jpeg(paste("Figures/Dot Plots/Pop Level Covariate Effects/ReddCounts_Ricker_CovarModel_DotPlot_Covs", i, "_", names.covars0[i], ".jpg", sep = ""), units = "in", width = 5, height = 5, res = 1500)
-  print(ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("coef[", 1:16, ",", i, "]", sep = "")), family = "coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-          theme_bw() + ylab("") + xlab("Effect") + ggtitle(names.covars.new[i]) + scale_y_discrete(labels = rev(pops), limits = rev) + geom_vline(xintercept = 0, linetype = "dashed") + 
-          aes(color = CovType[i]) + scale_color_manual(values = mycols2[i]) + theme(legend.position = "none", plot.title = element_text(hjust = 0.5), axis.text = element_text(color = "black")))
+  print(test + 
+          theme_bw() + 
+          ylab("") + xlab("Change in productivity") + ggtitle(names.covars.new[i]) + 
+          scale_y_discrete(labels = rev(popshort), limits = rev) + 
+          geom_vline(xintercept = 0, linetype = "solid", size = 0.2) +  
+          geom_point(data = test$data, aes(x = median, y = Parameter), size = 3) +
+          geom_point(data = test$data, aes(x = median, y = Parameter), size = 3, shape = 1, color = "black") +
+          aes(color = CovType[i]) + scale_color_manual(values = mycols2[i]) + 
+          theme(legend.position = "none", plot.title = element_text(hjust = 0.5), 
+                axis.text = element_text(color = "black"), panel.grid = element_blank()))
   dev.off()
 }
 ```
@@ -1100,22 +1175,30 @@ for (i in 1:length(names.covars0)) {
 Combined plot
 ```{r fig.width=11, fig.height=11}
 covplots <- list()
-popshort <- c("THCH", "BLKT", "BLCR", "COCA", "FISH", "FLAT", "LTBC", "LOBC", "NOWL", "PRCE", "SRSC", "SPRG", "UPBC")
 for (i in 1:length(names.covars0)) {
-  p1 <- eval(substitute(ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("coef[", 1:16, ",", i, "]", sep = "")), family = "coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-                          theme_bw() + ylab("") + xlab("") + xlim(-0.55, 0.49) + ggtitle(names.covars.new[i]) + geom_vline(xintercept = 0, linetype = "dashed") + 
-                          scale_y_discrete(labels = rev(popshort), limits = rev) + aes(color = CovType[i]) + scale_color_manual(values = mycols2[i]) + 
-                          theme(legend.position = "none", plot.margin = unit(c(0.1,0.1,-0.7,-0.5), 'lines'), plot.title = element_text(vjust = -0.5, hjust = 0.5), axis.text = element_text(color = "black")), list(i = i)))
+  test <- ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("coef[", 1:16, ",", i, "]", sep = "")), family = "coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
+  p1 <- eval(substitute(test + 
+                          theme_bw() + xlim(-0.55, 0.49) + 
+                          ylab("") + xlab("") + ggtitle(names.covars.new[i]) + 
+                          geom_vline(xintercept = 0, linetype = "solid", size = 0.2) +  
+                          geom_point(data = test$data, aes(x = median, y = Parameter), size = 3) +
+                          geom_point(data = test$data, aes(x = median, y = Parameter), size = 3, shape = 1, color = "black") +
+                          scale_y_discrete(labels = rev(popshort), limits = rev) + 
+                          aes(color = CovType[i]) + scale_color_manual(values = mycols2[i]) + 
+                          theme(legend.position = "none", plot.margin = unit(c(0.1,0.1,-0.7,-0.5), 'lines'), 
+                                plot.title = element_text(vjust = -0.5, hjust = 0.5), 
+                                axis.text = element_text(color = "black"), panel.grid = element_blank()), list(i = i)))
   covplots[[i]] <- p1
 }
-myfig <- ggarrange(plotlist = covplots, ncol = 4, nrow = 4)
+myfig <- annotate_figure(ggarrange(plotlist = covplots, ncol = 4, nrow = 4), 
+                         left = text_grob("Population", size = 16, rot = 90), 
+                         bottom = text_grob("Change in productivity, ln(R/S)", size = 16))
 myfig
 ```
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/Pop Level Covariate Effects/ReddCounts_Ricker_CovarModel_DotPlot_PopLevelCovEffects_combined.jpeg", height = 11.4, width = 11.4, units = "in", res = 1000)
-# ggarrange(plotlist = covplots, ncol = 4, nrow = 4)
-annotate_figure(myfig, left = text_grob("Population", rot = 90, size = 15), bottom = text_grob("Population-specific change in productivity, ln(R/S)", size = 15))
+myfig
 dev.off()
 ```
 
@@ -1123,21 +1206,33 @@ dev.off()
 #### Population variation in covariate effects
 
 ```{r fig.width=5.5, fig.height=6}
-ggs_caterpillar(D = mod.gg, family = "sigma.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + ylab("Environmental driver") + xlab("Population-level variation in covariate effect") + aes(color = CovType) + scale_color_manual(values = mycols) +
-  geom_vline(xintercept = 0, linetype = "dashed") + scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
+test <- ggs_caterpillar(D = mod.gg, family = "sigma.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
+test + 
+  theme_bw() + 
+  ylab("Environmental driver") + xlab("Population-level variation in covariate effect") + 
+  aes(color = CovType) + scale_color_manual(values = mycols) +
+  #geom_vline(xintercept = 0, linetype = "solid", size = 0.2) +
+  geom_point(data = test$data, aes(x = median, y = Parameter), size = 3, shape = 1, color = "black") +
+  scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
   theme(legend.position = "top") + theme(legend.title = element_blank(), axis.text = element_text(color = "black"), 
-        legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0))  + 
+        legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), 
+        panel.grid = element_blank())  + 
   guides(color = guide_legend(nrow = 2, byrow = TRUE))
 ```
 
 ```{r include=FALSE}
-jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_GlobalCovariatesSigma.jpg", units = "in", width = 5.5, height = 6, res = 1500)
-ggs_caterpillar(D = mod.gg, family = "sigma.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + ylab("Environmental driver") + xlab("Population-level variation in covariate effect") + aes(color = CovType) + scale_color_manual(values = mycols) +
-  geom_vline(xintercept = 0, linetype = "dashed") + scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
+jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_GlobalCovariatesSigma.jpg", units = "in", width = 5.5, height = 5, res = 1500)
+test <- ggs_caterpillar(D = mod.gg, family = "sigma.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
+test + 
+  theme_bw() + 
+  ylab("Environmental driver") + xlab("Population-level variation in covariate effect") + 
+  aes(color = CovType) + scale_color_manual(values = mycols) +
+  #geom_vline(xintercept = 0, linetype = "solid", size = 0.2) +
+  geom_point(data = test$data, aes(x = median, y = Parameter), size = 3, shape = 1, color = "black") +
+  scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
   theme(legend.position = "top") + theme(legend.title = element_blank(), axis.text = element_text(color = "black"), 
-        legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0))  + 
+        legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), 
+        panel.grid = element_blank())  + 
   guides(color = guide_legend(nrow = 2, byrow = TRUE))
 dev.off()
 ```
@@ -1146,27 +1241,27 @@ dev.off()
 #### Age proportional effects
 
 ```{r fig.width=5, fig.height=7}
-as_tibble(Mcmcdat[, c("p[1]", "p[2]", "p[3]", "p[4]", "p[5]", "p[6]", "p[7]", "p[8]", "p[9]", 
+as_tibble(Mcmcdat[, c("p[1]", "p[2]", "p[3]", "p[4]", "p[7]", "p[8]", "p[9]", 
                       "p[10]", "p[11]", "p[12]", "p[13]", "p[14]")]) %>%
   gather(key = "param", value = "value") %>% mutate(param = fct_rev(as_factor(param))) %>% 
   ggplot(aes(x = value, y = param, height = stat(density), fill = param)) + 
   geom_density_ridges(scale = 1.3, stat = "density", alpha = 0.8) +
-  scale_fill_manual(values = rev(mycols2)) + scale_y_discrete(labels = rev(names.covars.new), expand = expand_scale(mult = c(0.01, .07))) +
+  scale_fill_manual(values = rev(mycols2[-c(5:6)])) + scale_y_discrete(labels = rev(names.covars.new[-c(5:6)]), expand = expand_scale(mult = c(0.01, .07))) +
   ylab("Environmental driver") + xlab(expression(paste("Proportional effect at age-0 vs. age-1 (", rho, ")"))) +
   theme_bw() + theme(legend.position = "none", axis.text = element_text(color = "black"), 
         legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), panel.grid = element_blank())  + 
   guides(color = guide_legend(nrow = 2, byrow = TRUE))
 
 # same but plot as density/ridgelines
-mycols2 <- c(mycols[1], mycols[1], mycols[1], mycols[1], mycols[1], mycols[1], mycols[2], mycols[2], mycols[3], mycols[3], mycols[3], mycols[3], mycols[4], mycols[4])
+mycols2 <- c(mycols[1], mycols[1], mycols[1], mycols[1], mycols[1], mycols[1], mycols[1], mycols[2], mycols[2], mycols[3], mycols[3], mycols[3], mycols[3], mycols[4])
 # mycols2 <- c("darkorange", "darkorange", bls[3], bls[3], bls[3], bls[3], bls[1], bls[1], "seagreen", "seagreen", "seagreen", "seagreen", "grey50", "grey50")
-jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DensityPlot_ProportionalCov.jpg", units = "in", width = 5, height = 7, res = 1500)
-as_tibble(Mcmcdat[, c("p[1]", "p[2]", "p[3]", "p[4]", "p[5]", "p[6]", "p[7]", "p[8]", "p[9]", 
+jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DensityPlot_ProportionalCov.jpg", units = "in", width = 5, height = 5.5, res = 1500)
+as_tibble(Mcmcdat[, c("p[1]", "p[2]", "p[3]", "p[4]", "p[7]", "p[8]", "p[9]", 
                       "p[10]", "p[11]", "p[12]", "p[13]", "p[14]")]) %>%
   gather(key = "param", value = "value") %>% mutate(param = fct_rev(as_factor(param))) %>% 
   ggplot(aes(x = value, y = param, height = stat(density), fill = param)) + 
   geom_density_ridges(scale = 1.3, stat = "density", alpha = 0.8) +
-  scale_fill_manual(values = rev(mycols2)) + scale_y_discrete(labels = rev(names.covars.new), expand = expand_scale(mult = c(0.01, .07))) +
+  scale_fill_manual(values = rev(mycols2[-c(5:6)])) + scale_y_discrete(labels = rev(names.covars.new[-c(5:6)]), expand = expand_scale(mult = c(0.01, .07))) +
   ylab("Environmental driver") + xlab(expression(paste("Proportional effect at age-0 vs. age-1 (", rho, ")"))) +
   theme_bw() + theme(legend.position = "none", axis.text = element_text(color = "black"), 
         legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), panel.grid = element_blank())  + 
@@ -1178,25 +1273,25 @@ dev.off()
 #### Ricker a
 
 ```{r fig.width=5, fig.height=5}
-ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("A[", 1:13, "]", sep = "")), family = "A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("Ricker a") + scale_y_discrete(labels = rev(popshort), limits = rev)
+ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("A[", 1:13, "]", sep = "")), family = "A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker a") + scale_y_discrete(labels = rev(popshort), limits = rev)
 ```
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_RickerA.jpg", units = "in", width = 5, height = 5, res = 1500)
-ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("A[", 1:13, "]", sep = "")), family = "A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("Ricker a") + scale_y_discrete(labels = rev(popshort), limits = rev)
+ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("A[", 1:13, "]", sep = "")), family = "A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker a") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
 
-#### River b
+#### Ricker b
 
 ```{r fig.width=4, fig.height=5}
-ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("B[", 1:13, "]", sep = "")), family = "B", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("Ricker b") + scale_y_discrete(labels = rev(popshort), limits = rev)
+ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("B[", 1:13, "]", sep = "")), family = "B", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker b") + scale_y_discrete(labels = rev(popshort), limits = rev)
 ```
 
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_RickerB.jpg", units = "in", width = 4, height = 5, res = 1500)
-ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("B[", 1:13, "]", sep = "")), family = "B", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("Ricker b") + scale_y_discrete(labels = rev(popshort), limits = rev)
+ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("B[", 1:13, "]", sep = "")), family = "B", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker b") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
 
@@ -1205,14 +1300,14 @@ dev.off()
 
 ```{r fig.width=5, fig.height=3}
 ggs_caterpillar(D = mod.gg, family = "sigma.oe", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("") + xlab("Observation error") + scale_y_discrete(labels = "Global")
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("") + xlab("Observation error") + scale_y_discrete(labels = "Global")
 ```
 
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_ObservationError.jpg", units = "in", width = 5, height = 3, res = 1500)
 ggs_caterpillar(D = mod.gg, family = "sigma.oe", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("") + xlab("Observation error") + scale_y_discrete(labels = "Global")
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("") + xlab("Observation error") + scale_y_discrete(labels = "Global")
 dev.off()
 ```
 
@@ -1221,13 +1316,13 @@ dev.off()
 
 ```{r fig.width=4, fig.height=5}
 ggs_caterpillar(D = mod.gg, family = "sigma.pe", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("Process error") + scale_y_discrete(labels = rev(popshort), limits = rev)
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Process error") + scale_y_discrete(labels = rev(popshort), limits = rev)
 ```
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_ProcessError.jpg", units = "in", width = 4, height = 5, res = 1500)
 ggs_caterpillar(D = mod.gg, family = "sigma.pe", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("Process error") + scale_y_discrete(labels = rev(popshort), limits = rev)
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Process error") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
 
@@ -1236,14 +1331,14 @@ dev.off()
 
 ```{r fig.width=4, fig.height=5}
 ggs_caterpillar(D = mod.gg, family = "K", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("Carrying capacity (redds / km)") + scale_y_discrete(labels = rev(popshort), limits = rev)
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Carrying capacity (redds / km)") + scale_y_discrete(labels = rev(popshort), limits = rev)
 ```
 
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_CarryingCapacity.jpg", units = "in", width = 5, height = 5, res = 1500)
 ggs_caterpillar(D = mod.gg, family = "K", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("Carrying capacity (redds / km)") + scale_y_discrete(labels = rev(popshort), limits = rev)
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Carrying capacity (redds / km)") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
 
@@ -1252,13 +1347,13 @@ dev.off()
 
 ```{r fig.width=4, fig.height=5}
 ggs_caterpillar(D = mod.gg, family = "phi", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("AR1") + scale_y_discrete(labels = rev(popshort), limits = rev) + geom_vline(xintercept = 0, linetype = "dashed") 
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("AR1") + scale_y_discrete(labels = rev(popshort), limits = rev) + geom_vline(xintercept = 0, linetype = "dashed") 
 ```
 
 ```{r include = FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_AutoCorrResid.jpg", units = "in", width = 4, height = 5, res = 1500)
 ggs_caterpillar(D = mod.gg, family = "phi", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("Population") + xlab("AR1") + scale_y_discrete(labels = rev(popshort), limits = rev) + geom_vline(xintercept = 0, linetype = "dashed") 
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("AR1") + scale_y_discrete(labels = rev(popshort), limits = rev) + geom_vline(xintercept = 0, linetype = "dashed") 
 dev.off()
 ```
 
@@ -1266,13 +1361,13 @@ dev.off()
 
 ```{r}
 ggs_caterpillar(D = mod.gg, family = "sigma.A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("") + xlab("") + geom_vline(xintercept = 0, linetype = "dashed") 
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("") + xlab("") + geom_vline(xintercept = 0, linetype = "dashed") 
 ```
 
 ```{r include=FALSE}
-jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_SigmaA.jpg", units = "in", width = 5, height = 5, res = 1500)
+jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_SigmaA.jpg", units = "in", width = 5, height = 3, res = 1500)
 ggs_caterpillar(D = mod.gg, family = "sigma.A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
-  theme_bw() + theme(axis.text = element_text(color = "black")) + ylab("") + xlab("") + geom_vline(xintercept = 0, linetype = "dashed") 
+  theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("") + xlab("") + geom_vline(xintercept = 0, linetype = "dashed") 
 dev.off()
 ```
 
@@ -1295,21 +1390,15 @@ colPal <- hcl.colors(length(pops), "Spectral")
 ```
 
 
-::: panel-tabset
+Create and store plots in list
+```{r, results='hide'}
+plotlist <- list()
 
-#### JLD ramp duration
-
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
+# 1. duration of ramp down
 x1 <- seq(from = min(dat$z_jld_rampdur), to = max(dat$z_jld_rampdur), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Duration of ramp down (days)", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$jld_rampdur)
+# axes
 x.axis <- seq(from = 5, to = 30, by = 5)
 x.axis.scaled <- (x.axis - covsummary$mean[1]) / covsummary$sd[1]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[1]"]*x1 }
@@ -1318,36 +1407,29 @@ pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",1]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "10", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[1])
-```
+# store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+# plot
+plotlist[[1]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "10", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = x.axis) +
+  xlab("Duration of ramp down (days)") + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[1], fill = NA, linewidth = 2))))
 
-#### JLD ramp timing
 
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
+# 2. timing of ramp down
 x1 <- seq(from = min(dat$z_jld_rampratemindoy), to = max(dat$z_jld_rampratemindoy), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Timing of ramp down", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$jld_rampratemindoy)
+# axes 
 x.axis <- c(254,264,274)
 x.axis.scaled <- (x.axis - covsummary$mean[2]) / covsummary$sd[2]
-axis(1, at = x.axis.scaled, labels = c("10 Sept", "20 Sept", "30 Sept"))
-axis(2)
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[2]"]*x1 }
@@ -1356,36 +1438,29 @@ pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",2]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "26 Sept", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[2])
-```
+# store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+# plot
+plotlist[[2]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "26 Sept", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = c("10 Sept", "20 Sept", "30 Sept")) +
+  xlab("Timing of ramp down") + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[2], fill = NA, linewidth = 2))))
 
-#### JLD winter variation
 
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
+# 3. Mgd. winter flow variation 
 x1 <- seq(from = min(dat$z_jld_winvar, na.rm = TRUE), to = max(dat$z_jld_winvar, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Mgd. winter flow variation", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$jld_winvar, na.rm = T)
+# axes
 x.axis <- seq(from = 0, to = 0.3, by = 0.05)
 x.axis.scaled <- (x.axis - covsummary$mean[3]) / covsummary$sd[3]
-axis(1, at = x.axis.scaled, labels = c("0.00", "0.05", "0.10", "0.15", "0.20", "0.25", "0.30"))
-axis(2)
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[3]"]*x1 }
@@ -1394,36 +1469,29 @@ pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.225)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",3]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "0.043", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[3])
-```
+# store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+# plot
+plotlist[[3]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "0.043", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = c("0.00", "0.05", "0.10", "0.15", "0.20", "0.25", "0.30")) +
+  xlab("Mgd. winter flow variation") + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[3], fill = NA, linewidth = 2))))
 
-#### JLD summer flow
 
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
+# 4. Mgd. summer flow
 x1 <- seq(from = min(dat$z_jld_summean, na.rm = TRUE), to = max(dat$z_jld_summean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Mgd. summer mean flow (cfs)", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$jld_summean, na.rm = T)
+# axes 
 x.axis <- seq(from = 1500, to = 4500, by = 1000)
 x.axis.scaled <- (x.axis - covsummary$mean[4]) / covsummary$sd[4]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[4]"]*x1 }
@@ -1432,37 +1500,30 @@ pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",4]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "2700", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[4])
-```
+# store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+# plot
+plotlist[[4]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "2700", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = x.axis) +
+  xlab("Mgd. summer mean flow (cfs)") + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[4], fill = NA, linewidth = 2))))
 
-#### JLD peak flow mag.
 
-```{r fig.width=4.25, fig.height=4.4}
-# JLD Peak flow magnitude
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
+# 5. Mgd. peak flow magnitude, age-0 
 x1 <- seq(from = min(dat$z_jld_peakmag, na.rm = TRUE), to = max(dat$z_jld_peakmag, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Mgd. peak flow magnitude (cfs)", ylab = "Productivity, ln(R/S)", axes = F)
+plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Mgd. peak flow magnitude, age-0 (cfs)", ylab = "Productivity, ln(R/S)", axes = F)
 # axes and box
-# range(dat$jld_peakmag, na.rm = T)
 x.axis <- seq(from = 4000, to = 12000, by = 2000)
 x.axis.scaled <- (x.axis - covsummary$mean[5]) / covsummary$sd[5]
-axis(1, at = x.axis.scaled, labels = round((x.axis), digits = 0))
-axis(2)
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[5]"]*x1 }
@@ -1471,49 +1532,29 @@ pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",5]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
+## store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+## plot
+plotlist[[5]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "5884", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = round(x.axis, digits = 0)) +
+  xlab("Mgd. peak flow magnitude, age-0 (cfs)") + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[5], fill = NA, linewidth = 2))))
 
-# interaction with natural peak magnitude
-## minimum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[5]"]*x1 + Mcmcdat[j,"mu.coef[7]"]*min(dat$z_natq_peakmag, na.rm = T) + Mcmcdat[j,"mu.coef[13]"]*x1*min(dat$z_natq_peakmag, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 3, lwd = 2, type = "l")
-## maximum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[5]"]*x1 + Mcmcdat[j,"mu.coef[7]"]*max(dat$z_natq_peakmag, na.rm = T) + Mcmcdat[j,"mu.coef[13]"]*x1*max(dat$z_natq_peakmag, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 2, lwd = 2, type = "l")
-legend("topright", legend = c("Min. nat. peak flow", "Max. nat. peak flow"), lwd = 2, lty = c(3,2), bty = "n", cex = 0.75)
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "5884", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[5])
-```
 
-#### JLD peak flow timing
-
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_jld_peaktime, na.rm = TRUE), to = max(dat$z_jld_peaktime, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Mgd. peak flow timing", ylab = "Productivity, ln(R/S)", axes = F)
+# 6. Mgd. peak flow magnitude, age-1
+x1 <- seq(from = min(dat$z_jld_peakmag, na.rm = TRUE), to = max(dat$z_jld_peakmag, na.rm = TRUE), length.out = nvalues)
 # axes and box
-# range(dat$jld_peaktime, na.rm = T)
-x.axis <- c(242, 273, 303)
-x.axis.scaled <- (x.axis - covsummary$mean[6]) / covsummary$sd[6]
-axis(1, at = x.axis.scaled, labels = c("1 May", "1 June", "1 July"))
-axis(2)
+x.axis <- seq(from = 4000, to = 12000, by = 2000)
+x.axis.scaled <- (x.axis - covsummary$mean[5]) / covsummary$sd[5]
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[6]"]*x1 }
@@ -1522,50 +1563,30 @@ pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",6]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
+## store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+## plot
+plotlist[[6]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "5884", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = round(x.axis, digits = 0)) +
+  xlab("Mgd. peak flow magnitude, age-1 (cfs)") + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[6], fill = NA, linewidth = 2))))
 
-# interaction with natural peak magnitude
-## minimum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[6]"]*x1 + Mcmcdat[j,"mu.coef[8]"]*min(dat$z_natq_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*min(dat$z_natq_peaktime, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 3, lwd = 2, type = "l")
-## maximum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[6]"]*x1 + Mcmcdat[j,"mu.coef[8]"]*max(dat$z_natq_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*max(dat$z_natq_peaktime, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 2, lwd = 2, type = "l")
-legend("topleft", legend = c("Min. nat. peak time", "Max. nat. peak time"), lwd = 2, lty = c(3,2), bty = "n", cex = 0.75)
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "14 June", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[6])
-```
 
-#### Nat peak flow mag.
-
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_natq_peakmag, na.rm = TRUE), to = max(dat$z_natq_peakmag, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Natural peak flow magnitude (cfs)", ylab = "Productivity, ln(R/S)", axes = F)
+# 7. Mgd. peak flow timing
+x1 <- seq(from = min(dat$z_jld_peaktime, na.rm = TRUE), to = max(dat$z_jld_peaktime, na.rm = TRUE), length.out = nvalues)
 # axes and box
-# range(dat$natq_peakmag, na.rm = T)
-x.axis <- seq(from = 5000, to = 20000, by = 5000)
-x.axis.scaled <- (x.axis - covsummary$mean[7]) / covsummary$sd[7]
-axis(1, at = x.axis.scaled, labels = round((x.axis), digits = 0))
-axis(2)
-# predictions
+x.axis <- c(242, 273, 303)
+x.axis.scaled <- (x.axis - covsummary$mean[6]) / covsummary$sd[6]
+# predictions (primary effect)
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[7]"]*x1 }
 pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
@@ -1573,49 +1594,42 @@ pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",7]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-
-# interaction with natural peak magnitude
+# interaction with natural peak timing
 ## minimum
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[7]"]*x1 + Mcmcdat[j,"mu.coef[5]"]*min(dat$z_jld_peakmag, na.rm = T) + Mcmcdat[j,"mu.coef[13]"]*x1*min(dat$z_jld_peakmag, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 3, lwd = 2, type = "l")
+for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[7]"]*x1 + Mcmcdat[j,"mu.coef[9]"]*min(dat$z_natq_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*min(dat$z_natq_peaktime, na.rm = T) }
+pred_median_min <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
 ## maximum
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[7]"]*x1 + Mcmcdat[j,"mu.coef[5]"]*max(dat$z_jld_peakmag, na.rm = T) + Mcmcdat[j,"mu.coef[13]"]*x1*max(dat$z_jld_peakmag, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 2, lwd = 2, type = "l")
-legend("topright", legend = c("Min. JLD peak flow", "Max. JLD peak flow"), lwd = 2, lty = c(3,2), bty = "n", cex = 0.75)
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "10948", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[7])
-```
+for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[7]"]*x1 + Mcmcdat[j,"mu.coef[9]"]*max(dat$z_natq_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*max(dat$z_natq_peaktime, na.rm = T) }
+pred_median_max <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
+## store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+mytib_int <- tibble(x1 = x1, pred_median_min = pred_median_min, pred_median_max = pred_median_max) %>% gather("type", "effect", pred_median_min:pred_median_max) %>% mutate(type = as.factor(recode(type, pred_median_min = "Min. nat. peak timing", pred_median_max = "Max. nat. peak timing"))) 
+## plot
+plotlist[[7]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "14 June", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  geom_line(data = mytib_int, aes(x = x1, y = effect, linetype = type), size = 1) +
+  scale_linetype_manual(values = c("dashed", "dotted")) +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = c("1 May", "1 June", "1 July")) +
+  xlab("Mgd. peak flow timing") + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[6], fill = NA, linewidth = 2),
+        legend.position = "inside", legend.position.inside = c(0.15,0.9), legend.title = element_blank())))
 
-#### Nat peak flow timing
 
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_natq_peaktime, na.rm = TRUE), to = max(dat$z_natq_peaktime, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Natural peak flow timing", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$natq_peaktime, na.rm = T)
-x.axis <- c(256, 273, 287, 303)
-x.axis.scaled <- (x.axis - covsummary$mean[8]) / covsummary$sd[8]
-axis(1, at = x.axis.scaled, labels = c("15 May", "1 June", "15 June", "1 July"))
-axis(2)
+# 8. Nat. peak flow magnitude
+x1 <- seq(from = min(dat$z_natq_peakmag, na.rm = TRUE), to = max(dat$z_natq_peakmag, na.rm = TRUE), length.out = nvalues)
+# range(dat$natq_peakmag, na.rm = T)
+x.axis <- seq(from = 5000, to = 20000, by = 5000)
+x.axis.scaled <- (x.axis - covsummary$mean[7]) / covsummary$sd[7]
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[8]"]*x1 }
@@ -1624,125 +1638,104 @@ pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",8]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
+## store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+## plot
+plotlist[[8]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "10948", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = round(x.axis, digits = 0)) +
+  xlab("Natural peak flow magnitude (cfs)") + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[8], fill = NA, linewidth = 2))))
 
-# interaction with natural peak timing
-## minimum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[8]"]*x1 + Mcmcdat[j,"mu.coef[6]"]*min(dat$z_jld_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*min(dat$z_jld_peaktime, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 3, lwd = 2, type = "l")
-## maximum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[8]"]*x1 + Mcmcdat[j,"mu.coef[6]"]*max(dat$z_jld_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*max(dat$z_jld_peaktime, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 2, lwd = 2, type = "l")
-legend("topright", legend = c("Min. JLD peak time", "Max. JLD peak time"), lwd = 2, lty = c(3,2), bty = "n", cex = 0.75)
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "5 June", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[8])
-```
 
-#### Autumn temperature
-
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_temp_falmean, na.rm = TRUE), to = max(dat$z_temp_falmean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = expression(paste("Autumn temperature ("^"o", "C)", sep = "")), ylab = "Productivity, ln(R/S)", axes = F)
+# 9. Natural peak flow timing
+x1 <- seq(from = min(dat$z_natq_peaktime, na.rm = TRUE), to = max(dat$z_natq_peaktime, na.rm = TRUE), length.out = nvalues)
 # axes and box
-# range(dat$temp_falmean, na.rm = T)
-x.axis <- seq(from = 2, to = 6, by = 1)
-x.axis.scaled <- (x.axis - covsummary$mean[9]) / covsummary$sd[9]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
+x.axis <- c(256, 273, 287, 303)
+x.axis.scaled <- (x.axis - covsummary$mean[8]) / covsummary$sd[8]
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[9]"]*x1 }
+pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
+pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
+pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
+pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
+pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
+# interaction with managed peak timing
+## minimum
+pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
+for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[9]"]*x1 + Mcmcdat[j,"mu.coef[7]"]*min(dat$z_jld_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*min(dat$z_jld_peaktime, na.rm = T) }
+pred_median_min <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
+## maximum
+pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
+for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[9]"]*x1 + Mcmcdat[j,"mu.coef[7]"]*max(dat$z_jld_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*max(dat$z_jld_peaktime, na.rm = T) }
+pred_median_max <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
+## store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+mytib_int <- tibble(x1 = x1, pred_median_min = pred_median_min, pred_median_max = pred_median_max) %>% gather("type", "effect", pred_median_min:pred_median_max) %>% mutate(type = as.factor(recode(type, pred_median_min = "Min. mgd. peak timing", pred_median_max = "Max. mgd. peak timing"))) 
+## plot
+plotlist[[9]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "14 June", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  geom_line(data = mytib_int, aes(x = x1, y = effect, linetype = type), size = 0.7) +
+  scale_linetype_manual(values = c("dashed", "dotted")) +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = c("15 May", "1 June", "15 June", "1 July")) +
+  xlab("Natural peak flow timing") + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[9], fill = NA, linewidth = 2),
+        legend.position = "inside", legend.position.inside = c(0.83,0.9), legend.title = element_blank())))
+
+
+# 10. Autumn temperature
+x1 <- seq(from = min(dat$z_temp_falmean, na.rm = TRUE), to = max(dat$z_temp_falmean, na.rm = TRUE), length.out = nvalues)
+# axes and box
+x.axis <- seq(from = 2, to = 6, by = 1)
+x.axis.scaled <- (x.axis - covsummary$mean[9]) / covsummary$sd[9]
+# predictions
+pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
+for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[10]"]*x1 }
 pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
 pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.05)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",9]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "4.05", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[9])
-```
+## store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+## plot
+plotlist[[10]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "4.05", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = x.axis) +
+  xlab(expression(paste("Autumn temperature ("^"o", "C)", sep = ""))) + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[10], fill = NA, linewidth = 2))))
 
-#### Winter temperature
 
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
+# 11. Winter temperature
 x1 <- seq(from = min(dat$z_temp_winmean, na.rm = TRUE), to = max(dat$z_temp_winmean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = expression(paste("Winter temperature ("^"o", "C)", sep = "")), ylab = "Productivity, ln(R/S)", axes = F)
 # axes and box
-# range(dat$temp_winmean, na.rm = T)
 x.axis <- seq(from = -13, to = 5, by = 2)
 x.axis.scaled <- (x.axis - covsummary$mean[10]) / covsummary$sd[10]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[10]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.925)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",10]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "-9.29", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[10])
-```
-
-#### Spring temperature
-
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_temp_sprmean, na.rm = TRUE), to = max(dat$z_temp_sprmean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = expression(paste("Spring temperature ("^"o", "C)", sep = "")), ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$temp_sprmean, na.rm = T)
-x.axis <- seq(from = 0, to = 5, by = 1)
-x.axis.scaled <- (x.axis - covsummary$mean[11]) / covsummary$sd[11]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[11]"]*x1 }
@@ -1750,37 +1743,30 @@ pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50)
 pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",11]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "2.38", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[11])
-```
+pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.925)
+## store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+## plot
+plotlist[[11]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "-9.29", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = x.axis) +
+  xlab(expression(paste("Winter temperature ("^"o", "C)", sep = ""))) + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[11], fill = NA, linewidth = 2))))
 
-#### Summer temperature
 
-```{r fig.width=4.25, fig.height=4.4}
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_temp_summean, na.rm = TRUE), to = max(dat$z_temp_summean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = expression(paste("Summer temperature ("^"o", "C)", sep = "")), ylab = "Productivity, ln(R/S)", axes = F)
+# 12. Spring temperature
+x1 <- seq(from = min(dat$z_temp_sprmean, na.rm = TRUE), to = max(dat$z_temp_sprmean, na.rm = TRUE), length.out = nvalues)
 # axes and box
-# range(dat$temp_summean, na.rm = T)
-x.axis <- seq(from = 12, to = 17, by = 1)
-x.axis.scaled <- (x.axis - covsummary$mean[12]) / covsummary$sd[12]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
+x.axis <- seq(from = 0, to = 5, by = 1)
+x.axis.scaled <- (x.axis - covsummary$mean[11]) / covsummary$sd[11]
 # predictions
 pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
 for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[12]"]*x1 }
@@ -1789,547 +1775,160 @@ pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
 pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
 pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
 pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",12]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "14.81", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[12])
+## store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+## plot
+plotlist[[12]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "2.38", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = x.axis) +
+  xlab(expression(paste("Spring temperature ("^"o", "C)", sep = ""))) + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[12], fill = NA, linewidth = 2))))
+
+
+# 13. summer temperature
+x1 <- seq(from = min(dat$z_temp_summean, na.rm = TRUE), to = max(dat$z_temp_summean, na.rm = TRUE), length.out = nvalues)
+## axes
+x.axis <- seq(from = 12, to = 17, by = 1)
+x.axis.scaled <- (x.axis - covsummary$mean[12]) / covsummary$sd[12]
+## predictions
+pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
+for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[13]"]*x1 }
+pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
+pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
+pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
+pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
+pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
+## store in tibble
+mytib <- tibble(x1 = x1, pred_median = pred_median, pred_025 = pred_025, pred_125 = pred_125, pred_875 = pred_875, pred_975 = pred_975)
+## plot
+plotlist[[13]] <- eval(substitute(ggplot(mytib, aes(x = x1, y = pred_median)) +
+  geom_ribbon(aes(ymin = pred_025, ymax = pred_975), fill = "grey85") +
+  geom_ribbon(aes(ymin = pred_125, ymax = pred_875), fill = "grey70") +
+  geom_hline(yintercept = param.summary["mu.A",5], linetype = "dashed", color = "grey40") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  annotate("text", x = 0.1, y = 0.3, label = "14.81", color = "grey40", hjust = 0, vjust = 0.5) +
+  geom_line(linewidth = 1.2, lineend = "round") +
+  coord_cartesian(ylim = c(0.3,2)) +
+  scale_x_continuous(breaks = x.axis.scaled, labels = x.axis) +
+  xlab(expression(paste("Summer temperature ("^"o", "C)", sep = ""))) + ylab("Productivity, ln(R/S)") +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text = element_text(color = "black"), 
+        panel.border = element_rect(color = mycols2[13], fill = NA, linewidth = 2))))
+
+```
+
+::: panel-tabset
+
+#### Mgd. ramp duration
+
+```{r fig.width=4, fig.height=4}
+plotlist[[1]]
+```
+
+#### Mgd. ramp timing
+
+```{r fig.width=4, fig.height=4}
+plotlist[[2]]
+```
+
+#### Mgd. winter variation
+
+```{r fig.width=4, fig.height=4}
+plotlist[[3]]
+```
+
+#### Mgd. summer flow
+
+```{r fig.width=4, fig.height=4}
+plotlist[[4]]
+```
+
+#### Mgd. peak flow mag. (0)
+
+```{r fig.width=4, fig.height=4}
+plotlist[[5]]
+```
+
+#### Mgd. peak flow mag. (1)
+
+```{r fig.width=4, fig.height=4}
+plotlist[[6]]
+```
+
+#### JLD peak flow timing
+
+```{r fig.width=4, fig.height=4}
+plotlist[[7]] + theme(legend.position.inside = c(0.27,0.9))
+```
+
+#### Nat peak flow mag.
+
+```{r fig.width=4, fig.height=4}
+plotlist[[8]]
+```
+
+#### Nat peak flow timing
+
+```{r fig.width=4, fig.height=4}
+plotlist[[9]] + theme(legend.position.inside = c(0.75,0.9))
+```
+
+#### Autumn temperature
+
+```{r fig.width=4, fig.height=4}
+plotlist[[10]]
+```
+
+#### Winter temperature
+
+```{r fig.width=4, fig.height=4}
+plotlist[[11]]
+```
+
+#### Spring temperature
+
+```{r fig.width=4, fig.height=4}
+plotlist[[12]]
+```
+
+#### Summer temperature
+
+```{r fig.width=4, fig.height=4}
+plotlist[[13]]
 ```
 
 :::
 
 
+#### Combine plots
 
-Write plots to file...
+Combine marginal effects plots for covariates with strong and weak effects only
+```{r fig.width=8.5, fig.height=8.5}
+cp <- egg::ggarrange(plotlist[[2]] + annotation_custom(grid::textGrob("(a)", 0.08, 0.92)) + theme(axis.title.y = element_blank()),
+               plotlist[[4]] + annotation_custom(grid::textGrob("(b)", 0.08, 0.92)) + theme(axis.title.y = element_blank(), axis.text.y = element_blank()),
+               plotlist[[5]] + annotation_custom(grid::textGrob("(c)", 0.08, 0.92)) + theme(axis.title.y = element_blank(), axis.text.y = element_blank(), plot.margin = unit(c(5.5,10,5.5,5.5), "pt")),
+               plotlist[[6]] + annotation_custom(grid::textGrob("(d)", 0.08, 0.92)) ,
+               plotlist[[8]] + annotation_custom(grid::textGrob("(e)", 0.08, 0.92)) + theme(axis.title.y = element_blank(), axis.text.y = element_blank()),
+               plotlist[[9]] + annotation_custom(grid::textGrob("(f)", 0.08, 0.92)) + theme(axis.title.y = element_blank(), axis.text.y = element_blank(), legend.position.inside = c(0.68,0.88), legend.margin = margin(0, 2, 0, 1, unit = "mm"), legend.text = element_text(size = 8), legend.box.background = element_rect()),
+               plotlist[[11]] + annotation_custom(grid::textGrob("(g)", 0.08, 0.92)) + theme(axis.title.y = element_blank()),
+               plotlist[[12]] + annotation_custom(grid::textGrob("(h)", 0.08, 0.92)) + theme(axis.title.y = element_blank(), axis.text.y = element_blank()),
+               plotlist[[13]] + annotation_custom(grid::textGrob("(i)", 0.08, 0.92)) + theme(axis.title.y = element_blank(), axis.text.y = element_blank()), 
+               nrow = 3, ncol = 3)
 
-```{r include=FALSE}
-# JLD Ramp Duration
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_1_z_jld_rampdur.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_jld_rampdur), to = max(dat$z_jld_rampdur), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Duration of ramp down (days)", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$jld_rampdur)
-x.axis <- seq(from = 5, to = 30, by = 5)
-x.axis.scaled <- (x.axis - covsummary$mean[1]) / covsummary$sd[1]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[1]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",1]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "10", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[1])
+jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_Combined.jpg", units = "in", width = 8.5, height = 8.5, res = 1500)
+cp
 dev.off()
-
-
-# JLD Ramp Rate Min DOY
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_2_z_jld_rampratemindoy.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_jld_rampratemindoy), to = max(dat$z_jld_rampratemindoy), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Timing of ramp down", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$jld_rampratemindoy)
-x.axis <- c(254,264,274)
-x.axis.scaled <- (x.axis - covsummary$mean[2]) / covsummary$sd[2]
-axis(1, at = x.axis.scaled, labels = c("10 Sept", "20 Sept", "30 Sept"))
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[2]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",2]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "26 Sept", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[2])
-dev.off()
-
-
-
-# JLD winter variation
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_3_z_jld_winvar.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_jld_winvar, na.rm = TRUE), to = max(dat$z_jld_winvar, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Mgd. winter flow variation", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$jld_winvar, na.rm = T)
-x.axis <- seq(from = 0, to = 0.3, by = 0.05)
-x.axis.scaled <- (x.axis - covsummary$mean[3]) / covsummary$sd[3]
-axis(1, at = x.axis.scaled, labels = c("0.00", "0.05", "0.10", "0.15", "0.20", "0.25", "0.30"))
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[3]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.225)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",3]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "0.043", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[3])
-dev.off()
-
-
-
-# JLD Summer Mean Flow
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_4_z_jld_summean.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_jld_summean, na.rm = TRUE), to = max(dat$z_jld_summean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Mgd. summer mean flow (cfs)", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$jld_summean, na.rm = T)
-x.axis <- seq(from = 1500, to = 4500, by = 1000)
-x.axis.scaled <- (x.axis - covsummary$mean[4]) / covsummary$sd[4]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[4]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",4]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "2700", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[4])
-dev.off()
-
-
-
-# JLD Peak flow magnitude
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_5_z_jld_peakmag.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_jld_peakmag, na.rm = TRUE), to = max(dat$z_jld_peakmag, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Mgd. peak flow magnitude (cfs)", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$jld_peakmag, na.rm = T)
-x.axis <- seq(from = 4000, to = 12000, by = 2000)
-x.axis.scaled <- (x.axis - covsummary$mean[5]) / covsummary$sd[5]
-axis(1, at = x.axis.scaled, labels = round((x.axis), digits = 0))
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[5]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",5]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-
-# interaction with natural peak magnitude
-## minimum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[5]"]*x1 + Mcmcdat[j,"mu.coef[7]"]*min(dat$z_natq_peakmag, na.rm = T) + Mcmcdat[j,"mu.coef[13]"]*x1*min(dat$z_natq_peakmag, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 3, lwd = 2, type = "l")
-## maximum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[5]"]*x1 + Mcmcdat[j,"mu.coef[7]"]*max(dat$z_natq_peakmag, na.rm = T) + Mcmcdat[j,"mu.coef[13]"]*x1*max(dat$z_natq_peakmag, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 2, lwd = 2, type = "l")
-legend("topright", legend = c("Min. nat. peak flow", "Max. nat. peak flow"), lwd = 2, lty = c(3,2), bty = "n", cex = 0.75)
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "5884", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[5])
-dev.off()
-
-
-
-# JLD peak flow timing
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_6_z_jld_peaktime.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_jld_peaktime, na.rm = TRUE), to = max(dat$z_jld_peaktime, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Mgd. peak flow timing", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-range(dat$jld_peaktime, na.rm = T)
-x.axis <- c(242, 273, 303)
-x.axis.scaled <- (x.axis - covsummary$mean[6]) / covsummary$sd[6]
-axis(1, at = x.axis.scaled, labels = c("1 May", "1 June", "1 July"))
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[6]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",6]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-
-# interaction with natural peak magnitude
-## minimum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[6]"]*x1 + Mcmcdat[j,"mu.coef[8]"]*min(dat$z_natq_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*min(dat$z_natq_peaktime, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 3, lwd = 2, type = "l")
-## maximum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[6]"]*x1 + Mcmcdat[j,"mu.coef[8]"]*max(dat$z_natq_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*max(dat$z_natq_peaktime, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 2, lwd = 2, type = "l")
-legend("topleft", legend = c("Min. nat. peak time", "Max. nat. peak time"), lwd = 2, lty = c(3,2), bty = "n", cex = 0.75)
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "14 June", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[6])
-dev.off()
-
-
-
-# Natural Peak flow magnitude
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_7_z_natq_peakmag.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_natq_peakmag, na.rm = TRUE), to = max(dat$z_natq_peakmag, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Natural peak flow magnitude (cfs)", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$natq_peakmag, na.rm = T)
-x.axis <- seq(from = 5000, to = 20000, by = 5000)
-x.axis.scaled <- (x.axis - covsummary$mean[7]) / covsummary$sd[7]
-axis(1, at = x.axis.scaled, labels = round((x.axis), digits = 0))
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[7]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",7]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-
-# interaction with natural peak magnitude
-## minimum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[7]"]*x1 + Mcmcdat[j,"mu.coef[5]"]*min(dat$z_jld_peakmag, na.rm = T) + Mcmcdat[j,"mu.coef[13]"]*x1*min(dat$z_jld_peakmag, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 3, lwd = 2, type = "l")
-## maximum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[7]"]*x1 + Mcmcdat[j,"mu.coef[5]"]*max(dat$z_jld_peakmag, na.rm = T) + Mcmcdat[j,"mu.coef[13]"]*x1*max(dat$z_jld_peakmag, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 2, lwd = 2, type = "l")
-legend("topright", legend = c("Min. JLD peak flow", "Max. JLD peak flow"), lwd = 2, lty = c(3,2), bty = "n", cex = 0.75)
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "10948", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[7])
-dev.off()
-
-
-
-# Natural peak flow timing
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_8_z_natq_peaktime.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_natq_peaktime, na.rm = TRUE), to = max(dat$z_natq_peaktime, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = "Natural peak flow timing", ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$natq_peaktime, na.rm = T)
-x.axis <- c(256, 273, 287, 303)
-x.axis.scaled <- (x.axis - covsummary$mean[8]) / covsummary$sd[8]
-axis(1, at = x.axis.scaled, labels = c("15 May", "1 June", "15 June", "1 July"))
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[8]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",8]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-
-# interaction with natural peak timing
-## minimum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[8]"]*x1 + Mcmcdat[j,"mu.coef[6]"]*min(dat$z_jld_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*min(dat$z_jld_peaktime, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 3, lwd = 2, type = "l")
-## maximum
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[8]"]*x1 + Mcmcdat[j,"mu.coef[6]"]*max(dat$z_jld_peaktime, na.rm = T) + Mcmcdat[j,"mu.coef[14]"]*x1*max(dat$z_jld_peaktime, na.rm = T) }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-lines(pred_median ~ x1, lty = 2, lwd = 2, type = "l")
-legend("topright", legend = c("Min. JLD peak time", "Max. JLD peak time"), lwd = 2, lty = c(3,2), bty = "n", cex = 0.75)
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "5 June", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[8])
-dev.off()
-
-
-
-# Fall Temperature
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_9_z_temp_falmean.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_temp_falmean, na.rm = TRUE), to = max(dat$z_temp_falmean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = expression(paste("Autumn temperature ("^"o", "C)", sep = "")), ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-range(dat$temp_falmean, na.rm = T)
-x.axis <- seq(from = 2, to = 6, by = 1)
-x.axis.scaled <- (x.axis - covsummary$mean[9]) / covsummary$sd[9]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[9]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.05)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",9]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "4.05", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[9])
-dev.off()
-
-
-# Winter Temperature
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_10_z_temp_winmean.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_temp_winmean, na.rm = TRUE), to = max(dat$z_temp_winmean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = expression(paste("Winter temperature ("^"o", "C)", sep = "")), ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-range(dat$temp_winmean, na.rm = T)
-x.axis <- seq(from = -13, to = 5, by = 2)
-x.axis.scaled <- (x.axis - covsummary$mean[10]) / covsummary$sd[10]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[10]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.925)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",10]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "-9.29", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[10])
-dev.off()
-
-
-
-# Spring Temperature
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_11_z_temp_sprmean.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_temp_sprmean, na.rm = TRUE), to = max(dat$z_temp_sprmean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = expression(paste("Spring temperature ("^"o", "C)", sep = "")), ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$temp_sprmean, na.rm = T)
-x.axis <- seq(from = 0, to = 5, by = 1)
-x.axis.scaled <- (x.axis - covsummary$mean[11]) / covsummary$sd[11]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[11]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",11]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "2.38", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[11])
-
-
-
-
-# Summer Temperature
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_12_z_temp_summean.jpg", units = "in", width = 4.25, height = 4.4, res = 1500)
-par(mar = c(4,4,2.5,0.5), mgp = c(2.25,0.8,0))
-# set up plot
-x1 <- seq(from = min(dat$z_temp_summean, na.rm = TRUE), to = max(dat$z_temp_summean, na.rm = TRUE), length.out = nvalues)
-plot(seq(from = 0.3, to = 2, length.out = nvalues) ~ x1, pch = NA, bty = "l", xlab = expression(paste("Summer temperature ("^"o", "C)", sep = "")), ylab = "Productivity, ln(R/S)", axes = F)
-# axes and box
-# range(dat$temp_summean, na.rm = T)
-x.axis <- seq(from = 12, to = 17, by = 1)
-x.axis.scaled <- (x.axis - covsummary$mean[12]) / covsummary$sd[12]
-axis(1, at = x.axis.scaled, labels = x.axis)
-axis(2)
-# predictions
-pred <- matrix(NA, nrow = nrow(Mcmcdat), ncol = nvalues)
-for (j in 1:nrow(pred)) { pred[j,] <- Mcmcdat[j,"mu.A"] + Mcmcdat[j,"mu.coef[12]"]*x1 }
-pred_median <- apply(pred, MARGIN = 2, quantile, prob = 0.50) 
-pred_025 <- apply(pred, MARGIN = 2, quantile, prob = 0.025)
-pred_125 <- apply(pred, MARGIN = 2, quantile, prob = 0.125)
-pred_875 <- apply(pred, MARGIN = 2, quantile, prob = 0.875)
-pred_975 <- apply(pred, MARGIN = 2, quantile, prob = 0.975)
-polygon(c(x1, rev(x1)), c(pred_975, rev(pred_025)), col = "grey85", lty=0)
-polygon(c(x1, rev(x1)), c(pred_875, rev(pred_125)), col = "grey70", lty=0)
-# add population-specific fits
-# for (i in 1:n.pops) { lines(param.summary[paste("A[", i, "]", sep = ""),5] + param.summary[paste("coef[", i, ",12]", sep = ""),5]*x1 ~ x1, col = colPal[i], lwd = 1) }
-# add global fit
-lines(pred_median ~ x1, col = "black", lwd = 3, type = "l")
-# median productivity
-abline(h = param.summary["mu.A",5], lty = 3, col = "grey40")
-abline(v = 0, lty = 3, col = "grey40")
-text(x = 0, y = 0.3, labels = "14.81", pos = 4, col = "grey40")
-# lines(density((median(Mcmcdat[,"mu.A"]) - Mcmcdat[,"mu.A"]) / Mcmcdat[,"mu.coef[1]"]))
-# legend
-par(xpd = TRUE, usr = c(0,1,0,1))
-# legend(0.085, 1.15, legend = popshort, lwd = 1, col = colPal, ncol = 5, cex = 0.5, bg = "grey85")
-box(bty = "o", lwd = 3, col = mycols2[12])
-dev.off()
-
 ```
+
+
 
 
 ### Interactions
@@ -2353,93 +1952,6 @@ mycovdat <- mgdcovs %>% left_join(natcovs)
 Number of values for calculation
 ```{r}
 nvalues <- 100
-```
-
-
-#### Peak flow magnitude
-
-Generate sequences of predictor data and transform to original scale
-```{r}
-xjld <- seq(from = min(dat$z_jld_peakmag, na.rm = TRUE), to = max(dat$z_jld_peakmag, na.rm = TRUE), length.out = nvalues)
-xnat <- seq(from = min(dat$z_natq_peakmag, na.rm = TRUE), to = max(dat$z_natq_peakmag, na.rm = TRUE), length.out = nvalues)
-xjld.real <- (xjld * covsummary$sd[5]) + covsummary$mean[5]
-xnat.real <- (xnat * covsummary$sd[7]) + covsummary$mean[7]
-```
-
-Set up axes
-```{r}
-xjld.axis <- seq(from = 4000, to = 12000, by = 2000)
-xjld.axis.scaled <- (xjld.axis - covsummary$mean[5]) / covsummary$sd[5]
-
-xnat.axis <- seq(from = 5000, to = 20000, by = 5000)
-xnat.axis.scaled <- (xnat.axis - covsummary$mean[7]) / covsummary$sd[7]
-```
-
-Predict productivity from model
-```{r}
-z <- matrix(data = NA, nrow = nvalues, ncol = nvalues) # matrix of predictions
-com <- matrix(data = NA, nrow = nvalues, ncol = nvalues) # matrix of combined flow
-for(i in 1:nvalues) {
-  for(j in 1:nvalues) {
-    z[i,j] <- param.summary["mu.coef[5]",5]*xjld[i] + param.summary["mu.coef[7]",5]*xnat[j] + param.summary["mu.coef[13]",5]*xjld[i]*xnat[j]
-    com[i,j] <- (xjld.real[i]) + (xnat.real[j])
-  }
-  }
-z.cont <- ifelse(z < 0, 0, z) # trick for plotting single contour
-range(z)
-```
-
-Plot set up
-```{r}
-mylevels <- seq(-1, 1, by = 0.1) # specify location and number of breaks for plotting
-mycols <- rev(hcl.colors(length(mylevels)-1, "Blue-Red 3"))
-myddd <- mycovdat %>% select(z_natq_peakmag, z_jld_peakmag) %>% filter(!is.na(z_natq_peakmag))
-myhull <- chull(myddd)
-```
-
-```{r fig.width=6, fig.height=4.5}
-par(mar = c(5,5,1,1), mgp = c(3.5,1,0))
-filled.contour(x = xnat, y = xjld, z = t(z),
-               plot.title = {
-                 title(xlab = "Natural peak flow magnitude (cfs)")
-                 title(ylab = "Managed peak flow magnitude (cfs)")
-               },
-               levels = mylevels,
-               col = mycols,
-               plot.axes = {
-                 contour(x = xnat, y = xjld, z = t(z), levels = 0, lty = 3, lwd = 1, col = "grey40",
-                         drawlabels = F, axes = F, frame.plot = F, add = T);
-                 segments(myddd$z_natq_peakmag[myhull], myddd$z_jld_peakmag[myhull],
-                          myddd$z_natq_peakmag[c(myhull[length(myhull)], myhull[-length(myhull)])],
-                          myddd$z_jld_peakmag[c(myhull[length(myhull)], myhull[-length(myhull)])],
-                          col = "grey40", lwd = 2) # Draw convex hull lines
-                 axis(1, at = xnat.axis.scaled, labels = xnat.axis); 
-                 axis(2, at = xjld.axis.scaled, labels = xjld.axis)
-               })
-```
-
-
-```{r include=FALSE}
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_13_PeakMagnitude_Interaction.jpg", units = "in", width = 6, height = 4.5, res = 1500)
-par(mar = c(5,5,1,1), mgp = c(3.5,1,0))
-filled.contour(x = xnat, y = xjld, z = t(z),
-               plot.title = {
-                 title(xlab = "Natural peak flow magnitude (cfs)")
-                 title(ylab = "Managed peak flow magnitude (cfs)")
-               },
-               levels = mylevels,
-               col = mycols,
-               plot.axes = {
-                 contour(x = xnat, y = xjld, z = t(z), levels = 0, lty = 3, lwd = 1, col = "grey40",
-                         drawlabels = F, axes = F, frame.plot = F, add = T);
-                 segments(myddd$z_natq_peakmag[myhull], myddd$z_jld_peakmag[myhull],
-                          myddd$z_natq_peakmag[c(myhull[length(myhull)], myhull[-length(myhull)])],
-                          myddd$z_jld_peakmag[c(myhull[length(myhull)], myhull[-length(myhull)])],
-                          col = "grey40", lwd = 2) # Draw convex hull lines
-                 axis(1, at = xnat.axis.scaled, labels = xnat.axis); 
-                 axis(2, at = xjld.axis.scaled, labels = xjld.axis)
-               })
-dev.off()
 ```
 
 
@@ -2470,19 +1982,24 @@ z <- matrix(data = NA, nrow = nvalues, ncol = nvalues) # matrix of predictions
 com <- matrix(data = NA, nrow = nvalues, ncol = nvalues) # matrix of combined flow
 for(i in 1:nvalues) {
   for(j in 1:nvalues) {
-    z[i,j] <- param.summary["mu.coef[6]",5]*xjld[i] + param.summary["mu.coef[8]",5]*xnat[j] + param.summary["mu.coef[14]",5]*xjld[i]*xnat[j]
+    z[i,j] <- param.summary["mu.coef[7]",5]*xjld[i] + param.summary["mu.coef[9]",5]*xnat[j] + param.summary["mu.coef[14]",5]*xjld[i]*xnat[j]
   }
   }
 z.cont <- ifelse(z < 0, 0, z) # trick for plotting single contour
 range(z)
+
+
+conttib <- expand_grid(xnat = xnat, xjld = xjld) %>% 
+  mutate(prod = param.summary["mu.coef[7]",5]*xjld + param.summary["mu.coef[9]",5]*xnat + param.summary["mu.coef[14]",5]*xjld*xnat)
+range(conttib$prod)
 ```
 
 Plot set up
 ```{r}
 mylevels <- seq(-1, 1, by = 0.1) # specify location and number of breaks for plotting
 mycols <- rev(hcl.colors(length(mylevels)-1, "Blue-Red 3"))
-myddd <- mycovdat %>% select(z_natq_peaktime, z_jld_peaktime) %>% filter(!is.na(z_natq_peaktime), !is.na(z_jld_peaktime))
-myhull <- chull(myddd)
+myddd <- mycovdat %>% select(broodyr, z_natq_peaktime, z_jld_peaktime) %>% filter(!is.na(z_natq_peaktime), !is.na(z_jld_peaktime))
+myhull <- chull(myddd %>% select(-broodyr))
 ```
 
 ```{r fig.width=6, fig.height=4.5}
@@ -2497,18 +2014,18 @@ filled.contour(x = xnat, y = xjld, z = t(z),
                plot.axes = {
                  contour(x = xnat, y = xjld, z = t(z), levels = 0, lty = 3, lwd = 1, col = "grey40",
                          drawlabels = F, axes = F, frame.plot = F, add = T);
-                 segments(myddd$z_natq_peaktime[myhull], myddd$z_jld_peaktime[myhull],
-                          myddd$z_natq_peaktime[c(myhull[length(myhull)], myhull[-length(myhull)])],
-                          myddd$z_jld_peaktime[c(myhull[length(myhull)], myhull[-length(myhull)])],
-                          col = "grey40", lwd = 2) # Draw convex hull lines
+                 # segments(myddd$z_natq_peaktime[myhull], myddd$z_jld_peaktime[myhull],
+                 #          myddd$z_natq_peaktime[c(myhull[length(myhull)], myhull[-length(myhull)])],
+                 #          myddd$z_jld_peaktime[c(myhull[length(myhull)], myhull[-length(myhull)])],
+                 #          col = "grey40", lwd = 2) # Draw convex hull lines
                  axis(1, at = xnat.axis.scaled, labels = xnat.axis.labels);
-                 axis(2, at = xjld.axis.scaled, labels = xjld.axis.labels)
+                 axis(2, at = xjld.axis.scaled, labels = xjld.axis.labels);
+                 points(myddd$z_natq_peaktime, myddd$z_jld_peaktime)
                })
 ```
 
-
 ```{r include=FALSE}
-jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_14_PeakTiming_Interaction.jpg", units = "in", width = 6, height = 4.5, res = 1500)
+jpeg("Figures/Marginal Effects/ReddCounts_Ricker_CovarModel_MarginalEffects_PeakTiming_Interaction_noPoints.jpg", units = "in", width = 6, height = 4.5, res = 1500)
 par(mar = c(5,5,1,1), mgp = c(3.5,1,0))
 filled.contour(x = xnat, y = xjld, z = t(z),
                plot.title = {
@@ -2520,19 +2037,14 @@ filled.contour(x = xnat, y = xjld, z = t(z),
                plot.axes = {
                  contour(x = xnat, y = xjld, z = t(z), levels = 0, lty = 3, lwd = 1, col = "grey40",
                          drawlabels = F, axes = F, frame.plot = F, add = T);
-                 segments(myddd$z_natq_peaktime[myhull], myddd$z_jld_peaktime[myhull],
-                          myddd$z_natq_peaktime[c(myhull[length(myhull)], myhull[-length(myhull)])],
-                          myddd$z_jld_peaktime[c(myhull[length(myhull)], myhull[-length(myhull)])],
-                          col = "grey40", lwd = 2) # Draw convex hull lines
+                 # segments(myddd$z_natq_peaktime[myhull], myddd$z_jld_peaktime[myhull],
+                 #          myddd$z_natq_peaktime[c(myhull[length(myhull)], myhull[-length(myhull)])],
+                 #          myddd$z_jld_peaktime[c(myhull[length(myhull)], myhull[-length(myhull)])],
+                 #          col = "grey40", lwd = 2) # Draw convex hull lines
                  axis(1, at = xnat.axis.scaled, labels = xnat.axis.labels);
-                 axis(2, at = xjld.axis.scaled, labels = xjld.axis.labels)
+                 axis(2, at = xjld.axis.scaled, labels = xjld.axis.labels);
+                 #points(myddd$z_natq_peaktime, myddd$z_jld_peaktime)
                })
 dev.off()
 ```
-
-
-
-
-
-
 
