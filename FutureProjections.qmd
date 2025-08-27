@@ -11,6 +11,7 @@ library(abind)
 library(DT)
 library(sf)
 library(mapview)
+library(wesanderson)
 ```
 
 
@@ -182,20 +183,39 @@ at_fal_2050 <- (unlist(airtemp %>% filter(type == "corrected", season == "fal", 
 at_win_2050 <- (unlist(airtemp %>% filter(type == "corrected", season == "win", year == 2050) %>% select(temp_avg)) - unlist(covsummary[10,"mean"])) / unlist(covsummary[10,"sd"])
 at_spr_2050 <- (unlist(airtemp %>% filter(type == "corrected", season == "spr", year == 2050) %>% select(temp_avg)) - unlist(covsummary[11,"mean"])) / unlist(covsummary[11,"sd"])
 at_sum_2050 <- (unlist(airtemp %>% filter(type == "corrected", season == "sum", year == 2050) %>% select(temp_avg)) - unlist(covsummary[12,"mean"])) / unlist(covsummary[12,"sd"])
+
+c(at_win_2050, at_spr_2050, at_sum_2050)
 ```
 
 Calculate changes in natural and managed flow for static scenarios
 ```{r}
-# 2 weeks early: May 21 (-1.18 standard deviations)
-early_runoff <- ((unlist(covsummary[8,"mean"]) - 14) - unlist(covsummary[8,"mean"])) / unlist(covsummary[8,"sd"])
-# Early peak release: May 21, matched to natural early runoff (-1.41 standard deviations)
-early_release <- ((unlist(covsummary[8,"mean"]) - 14) - unlist(covsummary[6,"mean"])) / unlist(covsummary[6,"sd"])
-# Late peak release: June 27, 2 weeks after long-term average (+0.88 standard deciations)
-late_release <- ((unlist(covsummary[6,"mean"]) + 14) - unlist(covsummary[6,"mean"])) / unlist(covsummary[6,"sd"])
-# early ramp down: Sept 17, 1 week before long term average (-1.26 standard deviations)
-early_rampdown <- ((unlist(covsummary[2,"mean"]) - 10) - unlist(covsummary[2,"mean"])) / unlist(covsummary[2,"sd"])
-# late ramp down: Oct 7, 1 week after long term average (+1.26 standard deviations)
-late_rampdown <- ((unlist(covsummary[2,"mean"]) + 10) - unlist(covsummary[2,"mean"])) / unlist(covsummary[2,"sd"])
+## Climate baseline
+
+# 12 days early: May 23, 12 days before avg (-1 SD)
+early_runoff <- ((unlist(covsummary[8,"mean"]) - 12) - unlist(covsummary[8,"mean"])) / unlist(covsummary[8,"sd"])
+# natural drought: 7334 cfs (-1 SD)
+drought <- -1  #(-1*unlist(covsummary[7,"sd"])) + unlist(covsummary[7,"mean"])
+
+
+## Mgmt. Scenarios
+
+# Early peak release: May 23, matched to natural early runoff (-1.28 SDs)
+early_release <- ((unlist(covsummary[8,"mean"]) - 12) - unlist(covsummary[6,"mean"])) / unlist(covsummary[6,"sd"])
+# Late peak release: June 29, 14 days after long-term average (+1 SD)
+late_release <- 1 #(1*unlist(covsummary[6,"sd"])) + unlist(covsummary[6,"mean"])
+#((unlist(covsummary[6,"mean"]) + 14) - unlist(covsummary[6,"mean"])) / unlist(covsummary[6,"sd"])
+
+# early ramp down: Sept 19, 8 days before long term average (-1 standard deviations)
+early_rampdown <- -1  #(-1*unlist(covsummary[2,"sd"])) + unlist(covsummary[2,"mean"])
+#((unlist(covsummary[2,"mean"]) - 8) - unlist(covsummary[2,"mean"])) / unlist(covsummary[2,"sd"])
+# late ramp down: Oct 5, 8 days after long term average (+1 standard deviations)
+late_rampdown <- 1  #(1*unlist(covsummary[2,"sd"])) + unlist(covsummary[2,"mean"])
+#((unlist(covsummary[2,"mean"]) + 8) - unlist(covsummary[2,"mean"])) / unlist(covsummary[2,"sd"])
+
+# low mgd summer flow: 1863 cfs, -1 SD
+low_summerq <- -1  #(-1*unlist(covsummary[4,"sd"])) + unlist(covsummary[4,"mean"])
+# high mgd summer flow: 3538 cfs, +1 SD
+high_summerq <- 1  #(1*unlist(covsummary[4,"sd"])) + unlist(covsummary[4,"mean"])
 ```
 
 
@@ -215,26 +235,167 @@ tibble(season = c("autumn", "winter", "spring", "summer"),
 
 Define scenarios:
 ```{r}
+covarvec0 <- c(0,  # 1. duration of ramp down
+               0,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               0,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               0,  # 7. mgd peak flow timing
+               0,  # 8. nat peak flow magnitude
+               0,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               0,  # 11. winter temp
+               0,  # 12. spring temp
+               0,  # 13. summer temp
+               0)  # 14. mgd x nat peak flow timing (interaction)
+
 # 1. Baseline warming (through 2050)
-covarvec1 <- c(0,0,0,0,0,0,0,0,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,0)
+covarvec1 <- c(0,  # 1. duration of ramp down
+               0,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               0,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               0,  # 7. mgd peak flow timing
+               0,  # 8. nat peak flow magnitude
+               0,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               at_win_2050,  # 11. winter temp
+               at_spr_2050,  # 12. spring temp
+               at_sum_2050,  # 13. summer temp
+               0)  # 14. mgd x nat peak flow timing (interaction)
 
-# 2. Scen 1 + early peak runoff 
-covarvec2 <- c(0,0,0,0,0,0,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,0)
+# 2. warming + early peak runoff 
+covarvec2 <- c(0,  # 1. duration of ramp down
+               0,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               0,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               0,  # 7. mgd peak flow timing
+               0,  # 8. nat peak flow magnitude
+               early_runoff,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               at_win_2050,  # 11. winter temp
+               at_spr_2050,  # 12. spring temp
+               at_sum_2050,  # 13. summer temp
+               0)  # 14. mgd x nat peak flow timing (interaction)
 
-# 3. Scen 2 + early release
-covarvec3 <- c(0,0,0,0,0,early_release,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,early_release*early_runoff)
+# 3.Warming + early runoff + drought
+covarvec3 <- c(0,  # 1. duration of ramp down
+               0,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               0,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               0,  # 7. mgd peak flow timing
+               drought,  # 8. nat peak flow magnitude
+               early_runoff,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               at_win_2050,  # 11. winter temp
+               at_spr_2050,  # 12. spring temp
+               at_sum_2050,  # 13. summer temp
+               0)  # 14. mgd x nat peak flow timing (interaction)
 
-# 4. Scen 2 + late release
-covarvec4 <- c(0,0,0,0,0,late_release,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,late_release*early_runoff)
+# 4a. Scen 3 + early release
+covarvec4a <- c(0,  # 1. duration of ramp down
+               0,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               0,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               early_release,  # 7. mgd peak flow timing
+               drought,  # 8. nat peak flow magnitude
+               early_runoff,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               at_win_2050,  # 11. winter temp
+               at_spr_2050,  # 12. spring temp
+               at_sum_2050,  # 13. summer temp
+               early_release*early_runoff)  # 14. mgd x nat peak flow timing (interaction)
 
-# 5. Scen 2 + early ramp down
-covarvec5 <- c(0,early_rampdown,0,0,0,0,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,0)
+# 4b. Scen 3 + late release
+covarvec4b <- c(0,  # 1. duration of ramp down
+               0,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               0,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               late_release,  # 7. mgd peak flow timing
+               drought,  # 8. nat peak flow magnitude
+               early_runoff,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               at_win_2050,  # 11. winter temp
+               at_spr_2050,  # 12. spring temp
+               at_sum_2050,  # 13. summer temp
+               late_release*early_runoff)  # 14. mgd x nat peak flow timing (interaction)
 
-# 6. Scen 2 + late ramp down
-covarvec6 <- c(0,late_rampdown,0,0,0,0,0,early_runoff,at_fal_2050,at_win_2050,at_spr_2050,at_sum_2050,0,0)
+# 5a. Scen3 + early ramp down
+covarvec5a <- c(0,  # 1. duration of ramp down
+               early_rampdown,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               0,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               0,  # 7. mgd peak flow timing
+               drought,  # 8. nat peak flow magnitude
+               early_runoff,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               at_win_2050,  # 11. winter temp
+               at_spr_2050,  # 12. spring temp
+               at_sum_2050,  # 13. summer temp
+               0)  # 14. mgd x nat peak flow timing (interaction)
+
+# 5b. Scen3 + late ramp down
+covarvec5b <- c(0,  # 1. duration of ramp down
+               late_rampdown,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               0,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               0,  # 7. mgd peak flow timing
+               drought,  # 8. nat peak flow magnitude
+               early_runoff,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               at_win_2050,  # 11. winter temp
+               at_spr_2050,  # 12. spring temp
+               at_sum_2050,  # 13. summer temp
+               0)  # 14. mgd x nat peak flow timing (interaction)
+
+# 6a. Scen3 + low summer flow
+covarvec6a <- c(0,  # 1. duration of ramp down
+               0,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               low_summerq,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               0,  # 7. mgd peak flow timing
+               drought,  # 8. nat peak flow magnitude
+               early_runoff,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               at_win_2050,  # 11. winter temp
+               at_spr_2050,  # 12. spring temp
+               at_sum_2050,  # 13. summer temp
+               0)  # 14. mgd x nat peak flow timing (interaction)
+
+# 6b. Scen3 + high summer flow
+covarvec6b <- c(0,  # 1. duration of ramp down
+               0,  # 2. timing of ramp down
+               0,  # 3. mgd winter flow variation
+               high_summerq,  # 4. mgd summer mean flow
+               0,  # 5. mgd peak flow magnitude (age-0)
+               0,  # 6. mgd peak flow magnitude (age-1)
+               0,  # 7. mgd peak flow timing
+               drought,  # 8. nat peak flow magnitude
+               early_runoff,  # 9. nat peak flow timing
+               0,  # 10. autumn temp
+               at_win_2050,  # 11. winter temp
+               at_spr_2050,  # 12. spring temp
+               at_sum_2050,  # 13. summer temp
+               0)  # 14. mgd x nat peak flow timing (interaction)
 
 # combine scenarios into list
-scenario_list <- list(covarvec1, covarvec2, covarvec3, covarvec4, covarvec5, covarvec6)
+scenario_list <- list(covarvec1, covarvec2, covarvec3, covarvec4a, covarvec4b, covarvec5a, covarvec5b, covarvec6a, covarvec6b)
 ```
 
 
@@ -297,24 +458,23 @@ for (i in 1:length(scenario_list)) {
   productivity_list[[i]] <- prodvec
   print(i)
 }
-prodtib <- tibble(scenario = rep(c("sc1", "sc2", "sc3", "sc4", "sc5", "sc6"), each = n.simsss),
+prodtib <- tibble(scenario = rep(c("sc1", "sc2", "sc3", "sc4a", "sc4b", "sc5a", "sc5b", "sc6a", "sc6b"), each = n.simsss),
                   productivity = unlist(productivity_list))
 ```
 
-Assign colors based on change in median productivity
-```{r}
-mycols <- rev(hcl.colors(11, "Blue-Red 2"))
-mypal <- colorRampPalette(mycols)
-protib_summ <- prodtib %>% group_by(scenario) %>% summarise(median = median(productivity, na.rm = TRUE)) %>%
-  mutate(cols = mypal(100)[as.numeric(cut(median, breaks = seq(from = -0.5, to = 0.5, by = 0.01)))])
-```
 
 Plot
-```{r}
+```{r fig.width=4.5, fig.height=4.5}
+mypal <- c("grey60", wes_palette("GrandBudapest2", n = 3))
+
 par(mar = c(4,4,1,1), mgp = c(2.5,1,0))
-boxplot(productivity ~ scenario, prodtib, xlab = "Scenario", ylab = "Change in productivity", lty = 1, axes = FALSE, col = protib_summ$cols)
+boxplot(productivity ~ scenario, prodtib, xlab = "Scenario", ylab = "Change in productivity", lty = 1, axes = FALSE, 
+        col = c("grey85", "grey85", mypal[1], 
+                mypal[2], mypal[2], 
+                mypal[3], mypal[3], 
+                mypal[4], mypal[4]))
 abline(h = 0, lwd = 1, lty = 2)
-axis(1, at = c(1:6), labels = c(1:6))
+axis(1, at = c(1:9), labels = c("1", "2", "3", "4a", "4b", "5a", "5b", "6a", "6b"))
 axis(2)
 
 # par(mgp = c(2.5,4.75,0))
@@ -326,6 +486,20 @@ axis(2)
 #                                 "(6)\nWarming (2050)\nEarly runoff (2 wks)\nLate ramp-down (1 wk)"))
 # par(mgp = c(2.5,1,0))
 # axis(2)
+```
+
+```{r show=FALSE, results='hide'}
+jpeg("Figures/Projections/ScenarioPlanning_ChangeProductivity.jpg", units = "in", width = 4.5, height = 4.5, res = 1000)
+par(mar = c(4,4,0.1,0.1), mgp = c(2.5,1,0))
+boxplot(productivity ~ scenario, prodtib, xlab = "Scenario", ylab = "Change in productivity", lty = 1, axes = FALSE, 
+        col = c("grey85", "grey85", mypal[1], 
+                mypal[2], mypal[2], 
+                mypal[3], mypal[3], 
+                mypal[4], mypal[4]))
+abline(h = 0, lwd = 1, lty = 2)
+axis(1, at = c(1:9), labels = c("1", "2", "3", "4a", "4b", "5a", "5b", "6a", "6b"))
+axis(2)
+dev.off()
 ```
 
 
@@ -405,24 +579,21 @@ for (i in 1:length(scenario_list)) {
 for (i in 1:dim(recruitment_array)[3]) {
   recruitment_summed[,i] <- rowSums(recruitment_array[,,i])
 }
-rectib <- tibble(scenario = rep(c("sc1", "sc2", "sc3", "sc4", "sc5", "sc6"), each = n.simsss),
+rectib <- tibble(scenario = rep(c("sc1", "sc2", "sc3", "sc4a", "sc4b", "sc5a", "sc5b", "sc6a", "sc6b"), each = n.simsss),
                  recruitment = c(recruitment_summed))
 ```
 
-Assign colors based on change in median productivity
-```{r}
-mycols <- rev(hcl.colors(11, "Blue-Red 2"))
-mypal <- colorRampPalette(mycols)
-rectib_summ <- rectib %>% group_by(scenario) %>% summarise(median = median(recruitment, na.rm = TRUE)) %>%
-  mutate(cols = mypal(100)[as.numeric(cut(median, breaks = seq(from = -1000, to = 1000, by = 100)))])
-```
 
 Plot
 ```{r}
+mypal <- c("grey60", wes_palette("GrandBudapest2", n = 3))
 par(mar = c(4,4,1,1), mgp = c(2.5,1,0))
-boxplot(recruitment ~ scenario, rectib, xlab = "Scenario", ylab = "Change in recruitment (redds/km)", lty = 1, axes = FALSE, ylim = c(-1000, 5000))
+boxplot(recruitment ~ scenario, rectib, xlab = "Scenario", ylab = "Change in recruitment (redds/km)", lty = 1, axes = FALSE, col = c("grey85", "grey85", mypal[1], 
+                mypal[2], mypal[2], 
+                mypal[3], mypal[3], 
+                mypal[4], mypal[4]))
 abline(h = 0, lwd = 1, lty = 2)
-axis(1, at = c(1:6), labels = c(1:6))
+axis(1, at = c(1:9), labels = c("1", "2", "3", "4a", "4b", "5a", "5b", "6a", "6b"))
 axis(2)
 ```
 

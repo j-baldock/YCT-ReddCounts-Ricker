@@ -22,6 +22,7 @@ book:
       chapters:
         - FlowTemp_Covariates.qmd
         - JoinFishDataWithCovariates.qmd
+        - CovariateTimeSeries.qmd
     - part: "Modeling"
       chapters:
         - ReddCountsRicker.qmd
