@@ -38,6 +38,10 @@ site.info <- readNWISsite(sites)[,c(1:2,7,8,18)] # get site info
 names(site.info) <- c("agency", "logger", "lat", "long", "site") # rename columns 
 site.info$sitesimp <- c("SnakeMoran", "Blackrock", "BuffaloFork", "GrosVentreKelly", "GrosVentreZenith", "Fish", "Cache", "FlatBeCache", "SnakeBeFlat", "Greys", "Salt")
 mapview(st_as_sf(site.info, coords = c("long", "lat"), crs = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84"))
+
+# gages <- site.info %>% filter(sitesimp %in% c("SnakeMoran", "SnakeBeFlat")) %>% mutate(label = c("Managed", "Combined"))
+# gages_sp <- st_as_sf(gages, coords = c("long", "lat"), crs = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84")
+# st_write(gages_sp, "Figures/Map/map_data/Gages_SpatialLocations.shp", append = FALSE)
 ```
 
 Extract daily mean discharge and temp data from USGS NWIS and get date range for each gage:
@@ -142,7 +146,7 @@ flowpr <- flow2 %>%
   drop_na() %>% mutate(PrJLD = SnakeMoran / SnakeBeFlat) %>% group_by(doy) %>% 
   summarize(minpr = min(PrJLD), q25pr = quantile(PrJLD, probs = 0.25), medpr = median(PrJLD), meanpr = mean(PrJLD), q75pr = quantile(PrJLD, probs = 0.75), maxpr = max(PrJLD))
 range(flowpr$meanpr)
-plot(medpr ~ doy, flowpr, type = "n", ylim = c(0,1), xlab = "", ylab = "Proportional contribution of JLD release to total flow\n(Snake Moran / Snake Below Flat)", axes = F)
+plot(medpr ~ doy, flowpr, type = "n", ylim = c(0,1), xlab = "Time", ylab = "Proportional contribution of JLD release to total flow\n(Snake Moran / Snake Below Flat)", axes = F)
 axis(1, at = c(1,61,122,183,245,306,367), labels = c("Jan","Mar","May","Jul","Sep","Nov","Jan"))
 axis(2)
 box()
@@ -182,6 +186,56 @@ d %>% filter(broodyr %in% c(2000:2024)) %>%
   facet_wrap(~ broodyr)  +
   theme_bw() + theme(panel.grid = element_blank())
 ```
+
+Plot managed, natural, and combined hydrographs for all years 
+```{r fig.width=4, fig.height=4.75}
+singyr <- flow6 %>% filter(year == 2015)
+flow6 %>% filter(!is.na(flow_cfs), site %in% c("SnakeBeFlat", "SnakeMoran", "SnakeNat")) %>% group_by(site) %>% summarise(minyear = min(year, na.rm = TRUE), maxyear = max(year, na.rm = TRUE)) %>% ungroup
+
+p1 <- flow6 %>%
+  filter(site == "SnakeMoran") %>%
+  ggplot(aes(x = update(date, year = 2000), y = flow_cfs, group = year)) +
+  geom_line(color = "#E69F00", linewidth = 0.2, alpha = 0.6) +
+  geom_line(data = singyr %>% filter(site == "SnakeMoran"), aes(x = update(date, year = 2000), y = flow_cfs), linewidth = 0.8) +
+  scale_x_date(date_labels = "%b", expand = c(0.01,0.01)) +
+  coord_cartesian(ylim = c(0,15000)) +
+  annotate("text", x = as_date("2000-12-31"), y = Inf, hjust = 1, vjust = 1.5, label = "Managed flow: 1960-2023") +
+  theme_bw() + theme(panel.grid = element_blank(), axis.text = element_text(color = "black"),
+                     axis.title = element_blank(), axis.text.x = element_blank())
+
+p2 <- flow6 %>%
+  filter(site == "SnakeNat") %>%
+  ggplot(aes(x = update(date, year = 2000), y = flow_cfs, group = year)) +
+  geom_line(color = "#56B4E9", linewidth = 0.2, alpha = 0.6) +
+  geom_line(data = singyr %>% filter(site == "SnakeNat"), aes(x = update(date, year = 2000), y = flow_cfs), linewidth = 0.8) +
+  scale_x_date(date_labels = "%b", expand = c(0.01,0.01)) +
+  coord_cartesian(ylim = c(0,15000)) +
+  annotate("text", x = as_date("2000-12-31"), y = Inf, hjust = 1, vjust = 1.5, label = "Natural flow: 1975-2023") +
+  theme_bw() + theme(panel.grid = element_blank(), axis.text = element_text(color = "black"),
+                     axis.title = element_blank(), axis.text.x = element_blank())
+
+p3 <- flow6 %>%
+  filter(site == "SnakeBeFlat") %>%
+  ggplot(aes(x = update(date, year = 2000), y = flow_cfs, group = year)) +
+  geom_line(color = "grey40", linewidth = 0.2, alpha = 0.6) +
+  geom_line(data = singyr %>% filter(site == "SnakeBeFlat"), aes(x = update(date, year = 2000), y = flow_cfs), linewidth = 0.8) +
+  scale_x_date(date_labels = "%b", expand = c(0.01,0.01)) +
+  coord_cartesian(ylim = c(0,15000)) +
+  annotate("text", x = as_date("2000-12-31"), y = Inf, hjust = 1, vjust = 1.5, label = "Combined flow: 1975-2023") +
+  theme_bw() + theme(panel.grid = element_blank(), axis.text = element_text(color = "black"),
+                     axis.title = element_blank())
+
+egg::ggarrange(p1, p2, p3, ncol = 1)
+```
+
+Write to file
+```{r results='hide', eval=FALSE}
+jpeg("Figures/Covariates/Hydrographs_2015highlight_fixedyaxis.jpg", units = "in", width = 4.5, height = 4.75, res = 1000)
+egg::ggarrange(p1, p2, p3, ncol = 1)
+dev.off()
+
+```
+
 
 Time series of cv flows *sensu* Ward *et al.* (2015):
 ```{r}
@@ -790,5 +844,28 @@ predz <- predict(mod, newdata = list(broodyr = c(1980:2022)))
 lines(predz ~ c(1980:2022), lwd = 2, col = "red")
 
 dev.off()
+```
+
+Compare seasonal air and water temp where available
+```{r}
+watertemp <- tibble(readNWISdata(sites = "13013650", parameterCd = c("00010"), service = "dv", startDate = "1960-01-01", endDate = "2025-09-01")) %>% select(c(3,8)) 
+names(watertemp) <- c("date", "temp")
+
+watertemp <- watertemp %>% mutate(date = as_date(date)) %>% mutate(broodyr = year(date)-1, doy = yday(date)) %>% filter(doy >= 152 & doy <= 243) %>% group_by(broodyr) %>% summarise(wtemp = mean(temp)) %>% ungroup() %>% left_join(airsum %>% filter(site == "moose") %>% select(broodyr, temp_summean)) 
+
+# how many years of overlap?
+dim(watertemp[complete.cases(watertemp),])[1]
+
+# Pearson's r correlation
+cor.test(watertemp$wtemp, watertemp$temp_summean, method = "pearson")
+
+# plot 
+watertemp %>%
+  ggplot(aes(x = temp_summean, y = wtemp)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_bw() + theme(panel.grid = element_blank()) +
+  xlab("Summer mean air temperature (deg. C)") + ylab("Summer mean water temperature (deg. C)")
+
 ```
 

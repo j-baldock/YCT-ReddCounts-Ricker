@@ -6,6 +6,7 @@ library(knitr)
 # Render all
 quarto::quarto_render(output_format = "html")
 
+quarto::quarto_render("FlowTemp_Covariates.qmd", output_format = "html", cache_refresh = TRUE)
 quarto::quarto_render("CovariateTimeSeries.qmd", output_format = "html", cache_refresh = TRUE)
 quarto::quarto_render("ReddCountsRicker.qmd", output_format = "html", cache_refresh = TRUE)
 quarto::quarto_render("ClimateProjectionData.qmd", output_format = "html", cache_refresh = TRUE)
