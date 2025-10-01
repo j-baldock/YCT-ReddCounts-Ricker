@@ -32,7 +32,7 @@ library(ggmcmc)
 library(ggeffects)
 library(viridis)
 library(ggpubr)
-library(mcmcplots)
+# library(mcmcplots)
 library(beepr)
 library(ggridges)
 library(colorblindcheck)
@@ -677,7 +677,7 @@ saveRDS(mod_0, "Model output/ReddCountsRicker_Phase1_Age0.RDS")
 
 Read in model RDS file
 ```{r eval=FALSE}
-mod_0 <- readRDS("Redd Counts Ricker/Model output/ReddCountsRicker_Phase1_Age0.RDS")
+mod_0 <- readRDS("Model output/ReddCountsRicker_Phase1_Age0.RDS")
 ```
 
 
@@ -742,10 +742,10 @@ box(bty = "o")
 ```
 
 ```{r include=FALSE}
-jpeg("Figures/Model Diagnostics/ReddCounts_Ricker_CovarModel_Age01_ResidHist.jpg", units = "in", width = 6, height = 4, res = 1500)
+jpeg("Figures/Model Diagnostics/ReddCounts_Ricker_CovarModel_Age01_ResidHist.jpg", units = "in", width = 4.5, height = 4.5, res = 1500)
 par(mar = c(4,4,1,1), mgp = c(2.5,1,0))
-hist((ppdat_obs - ppdat_exp), main = "", xlab = "Observed - Expected")
-legend("topright", bty = "n", legend = paste("Median residual = ", round(median((ppdat_obs - ppdat_exp)), digits = 4), sep = ""))
+hist((ppdat_obs - ppdat_exp), main = "", xlab = "Residual (observed - expected)")
+legend("topright", bty = "n", legend = paste("Median residual \n= ", round(median((ppdat_obs - ppdat_exp)), digits = 4), sep = ""))
 abline(v = median(unlist(ppdat_obs - ppdat_exp)), col = "red", lwd = 2)
 box(bty = "o")
 dev.off()
@@ -1277,7 +1277,7 @@ ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("A[", 1:13, "]", sep 
 ```
 
 ```{r include=FALSE}
-jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_RickerA.jpg", units = "in", width = 5, height = 5, res = 1500)
+jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_RickerA.jpg", units = "in", width = 3, height = 5, res = 1500)
 ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("A[", 1:13, "]", sep = "")), family = "A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker a") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
@@ -1290,7 +1290,7 @@ ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("B[", 1:13, "]", sep 
 
 
 ```{r include=FALSE}
-jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_RickerB.jpg", units = "in", width = 4, height = 5, res = 1500)
+jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_RickerB.jpg", units = "in", width = 3, height = 5, res = 1500)
 ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("B[", 1:13, "]", sep = "")), family = "B", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker b") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
@@ -1320,7 +1320,7 @@ ggs_caterpillar(D = mod.gg, family = "sigma.pe", thick_ci = c(0.125, 0.875), thi
 ```
 
 ```{r include=FALSE}
-jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_ProcessError.jpg", units = "in", width = 4, height = 5, res = 1500)
+jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_ProcessError.jpg", units = "in", width = 3, height = 5, res = 1500)
 ggs_caterpillar(D = mod.gg, family = "sigma.pe", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
   theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Process error") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
