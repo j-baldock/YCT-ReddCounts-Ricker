@@ -27,8 +27,9 @@ redds %>% ggplot() + geom_point(aes(x = year, y = reddspermile)) + geom_line(aes
 Map sites:
 ```{r}
 reddlocs <- redds %>% group_by(stream) %>% summarize(lat = unique(lat), long = unique(long)) # summarize location data
+reddlocs$stream_short <- c("THCH", "BLKT", "BLCR", "COCA", "FISH", "FLAT", "LTBC", "LOBC", "NOWL", "PRCE", "SRSC", "SPRG", "UPBC")
 reddlocs_sp <- st_as_sf(reddlocs, coords = c("long", "lat"), crs = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84")
-# st_write(reddlocs_sp, "Redd Counts Ricker/Spatial/ReddCounts_SpatialLocations.shp", append = FALSE)
+#st_write(reddlocs_sp, "Figures/Map/map_data/ReddCounts_SpatialLocations.shp", append = FALSE)
 mapview(reddlocs_sp) # map
 ```
 
