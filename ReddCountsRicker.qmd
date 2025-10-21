@@ -618,7 +618,7 @@ mod_01pb <- jags.parallel(data = jags.data, inits = NULL, parameters.to.save = j
                           model.file = "JAGS Models/Ricker_Hierarchical_StateSpace_OEestimated_Covars_Proportional.txt", 
                           n.chains = 20, n.thin = 200, n.burnin = 10000, n.iter = 60000, DIC = TRUE)
 MCMCtrace(mod_01pb, ind = TRUE, params = c("A", "B", "mu.A", "sigma.A", "sigma.oe", "sigma.pe", "mu.coef", "sigma.coef", "p", "phi"),
-          filename = "Model output/MCMCtrace_ReddCountsRicker_Test_Age01p_winvar_AgeSpecMgdPeakMag.pdf") # write out traceplots
+          filename = "Model output/MCMCtrace_ReddCountsRicker_Test_Age01p_winvar_AgeSpecMgdPeakMag_2.pdf") # write out traceplots
 Sys.time() - st
 beep()
 ```
@@ -1101,7 +1101,10 @@ mycols <- c("#E69F00", "#56B4E9", "#009E73", "#999999")
 #   theme(legend.position = "top", legend.title = element_blank(), axis.text = element_text(color = "black"),
 #         legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), panel.grid = element_blank()) + 
 #   guides(color = guide_legend(nrow = 2, byrow = TRUE))
-test <- ggs_caterpillar(D = mod.gg, family = "mu.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
+test <- ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% grep("mu.coef", unique(mod.gg$Parameter), value = TRUE)) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("mu.coef[1]", "mu.coef[2]", "mu.coef[3]", "mu.coef[4]", "mu.coef[5]", "mu.coef[6]", "mu.coef[7]", "mu.coef[8]", "mu.coef[9]", "mu.coef[10]", "mu.coef[11]", "mu.coef[12]", "mu.coef[13]", "mu.coef[14]"))), 
+                thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
 test +
   theme_bw() + 
   ylab("Environmental driver") + 
@@ -1119,6 +1122,26 @@ test +
   geom_errorbarh(data = test$data, aes(xmin = Low, xmax = High), size = 1.5, height = 0) +
   geom_errorbarh(data = test$data, aes(xmin = low, xmax = high), height = 0) +
   geom_point(data = test$data, aes(x = median, y = Parameter), size = 3, shape = 1, color = "black")
+
+
+# test <- ggs_caterpillar(D = mod.gg, family = "mu.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
+# test +
+#   theme_bw() + 
+#   ylab("Environmental driver") + 
+#   xlab("Global change in productivity, ln(R/S)") + 
+#   aes(color = CovType) +
+#   scale_color_manual(values = mycols) + 
+#   geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 8.5, ymax = 10.5), fill = "grey80", color = NA) +
+#   geom_vline(xintercept = 0, linetype = "dashed") + 
+#   #scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
+#   theme(legend.position = "top", legend.title = element_blank(), axis.text = element_text(color = "black"),
+#         legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), 
+#         panel.grid = element_blank(), axis.title = element_text(size = 14)) + 
+#   guides(color = guide_legend(nrow = 2, byrow = TRUE)) +
+#   geom_point(data = test$data, aes(x = median, y = Parameter), size = 3) +
+#   geom_errorbarh(data = test$data, aes(xmin = Low, xmax = High), size = 1.5, height = 0) +
+#   geom_errorbarh(data = test$data, aes(xmin = low, xmax = high), height = 0) +
+#   geom_point(data = test$data, aes(x = median, y = Parameter), size = 3, shape = 1, color = "black")
 ```
 
 ```{r include=FALSE}
@@ -1161,7 +1184,7 @@ for (i in 1:length(names.covars0)) {
   print(test + 
           theme_bw() + 
           ylab("") + xlab("Change in productivity") + ggtitle(names.covars.new[i]) + 
-          scale_y_discrete(labels = rev(popshort), limits = rev) + 
+          scale_y_discrete(labels = rev(popshort[c(1,10,11,12,13,2,3,4,5,6,7,8,9)]), limits = rev) + 
           geom_vline(xintercept = 0, linetype = "solid", size = 0.2) +  
           geom_point(data = test$data, aes(x = median, y = Parameter), size = 3) +
           geom_point(data = test$data, aes(x = median, y = Parameter), size = 3, shape = 1, color = "black") +
@@ -1183,7 +1206,7 @@ for (i in 1:length(names.covars0)) {
                           geom_vline(xintercept = 0, linetype = "solid", size = 0.2) +  
                           geom_point(data = test$data, aes(x = median, y = Parameter), size = 3) +
                           geom_point(data = test$data, aes(x = median, y = Parameter), size = 3, shape = 1, color = "black") +
-                          scale_y_discrete(labels = rev(popshort), limits = rev) + 
+                          scale_y_discrete(labels = rev(popshort[c(1,10,11,12,13,2,3,4,5,6,7,8,9)]), limits = rev) + 
                           aes(color = CovType[i]) + scale_color_manual(values = mycols2[i]) + 
                           theme(legend.position = "none", plot.margin = unit(c(0.1,0.1,-0.7,-0.5), 'lines'), 
                                 plot.title = element_text(vjust = -0.5, hjust = 0.5), 
@@ -1206,7 +1229,10 @@ dev.off()
 #### Population variation in covariate effects
 
 ```{r fig.width=5.5, fig.height=6}
-test <- ggs_caterpillar(D = mod.gg, family = "sigma.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
+test <- ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% grep("sigma.coef", unique(mod.gg$Parameter), value = TRUE)) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("sigma.coef[1]", "sigma.coef[2]", "sigma.coef[3]", "sigma.coef[4]", "sigma.coef[5]", "sigma.coef[6]", "sigma.coef[7]", "sigma.coef[8]", "sigma.coef[9]", "sigma.coef[10]", "sigma.coef[11]", "sigma.coef[12]", "sigma.coef[13]", "sigma.coef[14]"))), 
+                thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
 test + 
   theme_bw() + 
   ylab("Environmental driver") + xlab("Population-level variation in covariate effect") + 
@@ -1222,7 +1248,6 @@ test +
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_GlobalCovariatesSigma.jpg", units = "in", width = 5.5, height = 5, res = 1500)
-test <- ggs_caterpillar(D = mod.gg, family = "sigma.coef", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE)
 test + 
   theme_bw() + 
   ylab("Environmental driver") + xlab("Population-level variation in covariate effect") + 
@@ -1273,25 +1298,45 @@ dev.off()
 #### Ricker a
 
 ```{r fig.width=5, fig.height=5}
-ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("A[", 1:13, "]", sep = "")), family = "A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker a") + scale_y_discrete(labels = rev(popshort), limits = rev)
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("A[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("A[1]", "A[2]", "A[3]", "A[4]", "A[5]", "A[6]", "A[7]", "A[8]", "A[9]", "A[10]", "A[11]", "A[12]", "A[13]"))), 
+                family = "A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
+  theme_bw() + 
+  theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + 
+  ylab("Population") + xlab("Ricker a") + 
+  scale_y_discrete(labels = rev(popshort), limits = rev)
 ```
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_RickerA.jpg", units = "in", width = 3, height = 5, res = 1500)
-ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("A[", 1:13, "]", sep = "")), family = "A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker a") + scale_y_discrete(labels = rev(popshort), limits = rev)
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("A[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("A[1]", "A[2]", "A[3]", "A[4]", "A[5]", "A[6]", "A[7]", "A[8]", "A[9]", "A[10]", "A[11]", "A[12]", "A[13]"))), 
+                family = "A", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
+  theme_bw() + 
+  theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + 
+  ylab("Population") + xlab("Ricker a") + 
+  scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
 
 #### Ricker b
 
 ```{r fig.width=4, fig.height=5}
-ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("B[", 1:13, "]", sep = "")), family = "B", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker b") + scale_y_discrete(labels = rev(popshort), limits = rev)
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("B[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("B[1]", "B[2]", "B[3]", "B[4]", "B[5]", "B[6]", "B[7]", "B[8]", "B[9]", "B[10]", "B[11]", "B[12]", "B[13]"))), 
+                family = "B", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker b") + scale_y_discrete(labels = rev(popshort), limits = rev)
 ```
 
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_RickerB.jpg", units = "in", width = 3, height = 5, res = 1500)
-ggs_caterpillar(D = mod.gg %>% filter(Parameter %in% paste("B[", 1:13, "]", sep = "")), family = "B", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker b") + scale_y_discrete(labels = rev(popshort), limits = rev)
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("B[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("B[1]", "B[2]", "B[3]", "B[4]", "B[5]", "B[6]", "B[7]", "B[8]", "B[9]", "B[10]", "B[11]", "B[12]", "B[13]"))), 
+                family = "B", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Ricker b") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
 
@@ -1315,13 +1360,19 @@ dev.off()
 #### Process error
 
 ```{r fig.width=4, fig.height=5}
-ggs_caterpillar(D = mod.gg, family = "sigma.pe", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("sigma.pe[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("sigma.pe[1]", "sigma.pe[2]", "sigma.pe[3]", "sigma.pe[4]", "sigma.pe[5]", "sigma.pe[6]", "sigma.pe[7]", "sigma.pe[8]", "sigma.pe[9]", "sigma.pe[10]", "sigma.pe[11]", "sigma.pe[12]", "sigma.pe[13]"))), 
+                thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
   theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Process error") + scale_y_discrete(labels = rev(popshort), limits = rev)
 ```
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_ProcessError.jpg", units = "in", width = 3, height = 5, res = 1500)
-ggs_caterpillar(D = mod.gg, family = "sigma.pe", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("sigma.pe[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("sigma.pe[1]", "sigma.pe[2]", "sigma.pe[3]", "sigma.pe[4]", "sigma.pe[5]", "sigma.pe[6]", "sigma.pe[7]", "sigma.pe[8]", "sigma.pe[9]", "sigma.pe[10]", "sigma.pe[11]", "sigma.pe[12]", "sigma.pe[13]"))), 
+                thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
   theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Process error") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
@@ -1330,14 +1381,20 @@ dev.off()
 #### Carrying capacity
 
 ```{r fig.width=4, fig.height=5}
-ggs_caterpillar(D = mod.gg, family = "K", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("K[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("K[1]", "K[2]", "K[3]", "K[4]", "K[5]", "K[6]", "K[7]", "K[8]", "K[9]", "K[10]", "K[11]", "K[12]", "K[13]"))), 
+                thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
   theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Carrying capacity (redds / km)") + scale_y_discrete(labels = rev(popshort), limits = rev)
 ```
 
 
 ```{r include=FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_CarryingCapacity.jpg", units = "in", width = 5, height = 5, res = 1500)
-ggs_caterpillar(D = mod.gg, family = "K", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("K[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("K[1]", "K[2]", "K[3]", "K[4]", "K[5]", "K[6]", "K[7]", "K[8]", "K[9]", "K[10]", "K[11]", "K[12]", "K[13]"))), 
+                thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
   theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("Carrying capacity (redds / km)") + scale_y_discrete(labels = rev(popshort), limits = rev)
 dev.off()
 ```
@@ -1346,13 +1403,19 @@ dev.off()
 #### Phi - autocorrelated residuls
 
 ```{r fig.width=4, fig.height=5}
-ggs_caterpillar(D = mod.gg, family = "phi", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("phi[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("phi[1]", "phi[2]", "phi[3]", "phi[4]", "phi[5]", "phi[6]", "phi[7]", "phi[8]", "phi[9]", "phi[10]", "phi[11]", "phi[12]", "phiK[13]"))), 
+                thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
   theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("AR1") + scale_y_discrete(labels = rev(popshort), limits = rev) + geom_vline(xintercept = 0, linetype = "dashed") 
 ```
 
 ```{r include = FALSE}
 jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_AutoCorrResid.jpg", units = "in", width = 4, height = 5, res = 1500)
-ggs_caterpillar(D = mod.gg, family = "phi", thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
+ggs_caterpillar(mod.gg %>% 
+                  filter(Parameter %in% paste("phi[", 1:13, "]", sep = "")) %>%
+                  mutate(Parameter = factor(Parameter, levels = c("phi[1]", "phi[2]", "phi[3]", "phi[4]", "phi[5]", "phi[6]", "phi[7]", "phi[8]", "phi[9]", "phi[10]", "phi[11]", "phi[12]", "phiK[13]"))), 
+                thick_ci = c(0.125, 0.875), thin_ci = c(0.025, 0.975), sort = FALSE) + 
   theme_bw() + theme(axis.text = element_text(color = "black"), panel.grid = element_blank()) + ylab("Population") + xlab("AR1") + scale_y_discrete(labels = rev(popshort), limits = rev) + geom_vline(xintercept = 0, linetype = "dashed") 
 dev.off()
 ```
