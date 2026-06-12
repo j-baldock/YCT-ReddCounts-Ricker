@@ -9,3 +9,4 @@ Old scripts/
 Model output/
 ReddCountsRicker_cache/
 Projections/
+**/*.quarto_ipynb

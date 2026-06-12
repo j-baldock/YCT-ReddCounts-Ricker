@@ -59,7 +59,7 @@ covsrc_jldq_summary <- read_csv("Data/Derived/ManagedFlow_SummaryMeanSD_1967-202
 covsrc_natq_summary <- read_csv("Data/Derived/NaturalFlow_SummaryMeanSD_1975-2022.csv")
 covsrc_expq_summary <- read_csv("Data/Derived/ExperiencedFlow_SummaryMeanSD_1975-2022.csv")
 covsrc_temp_summary <- read_csv("Data/Derived/Temperature_SummaryMeanSD_1967-2022.csv")
-covsummary <- rbind(covsrc_jldq_summary[c(1,2,6:9),], covsrc_natq_summary[c(6:7),], covsrc_temp_summary)
+covsummary <- rbind(covsrc_jldq_summary[c(1,2,6,8:10),], covsrc_natq_summary[c(6:7),], covsrc_temp_summary)
 write_csv(covsummary, "Projections/Covariates_SummaryMeanSD_forProjections.csv")
 ```
 ```{r}
@@ -650,9 +650,6 @@ manipulate(Ricker(z_jld_rampratemindoy, z_jld_peaktime, z_natq_peaktime, z_temp_
            z_temp_summean = slider(min = covsummary$min_zscore[12], covsummary$max_zscore[12], initial = 0, step = 0.1))
 
 ```
-
-
-
 
 
 
