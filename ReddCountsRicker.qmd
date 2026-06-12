@@ -213,11 +213,11 @@ Get covariate names
 # names.covars1 <- grep("z", names(dat0), value = TRUE)[c(1:3,5:8,11,14:19)] # age-0
 # names.covars0 <- grep("z", names(dat0), value = TRUE)[c(1:3,5:8,14:15,20,16:19)] # age-0
 # names.covars0 <- grep("z", names(dat0), value = TRUE)[c(1:3,5:8,20,14:19)] # age-0
-names.covars0 <- grep("z", names(dat0), value = TRUE)[c(1:2,6,7:9,15:20)]#[c(2:3,5,7:9,15:20)] # age-0
+names.covars0 <- grep("z", names(dat0), value = TRUE)[c(1:2,6,8:10,16:21)]#[c(2:3,5,7:9,15:20)] # age-0
 # names.covars2 <- grep("z", names(dat1), value = TRUE)[c(1:3,5:8,11,14:19)] # age-1
 # names.covars1 <- grep("z", names(dat0), value = TRUE)[c(1:3,5:8,14:15,20,16:19)] # age-1
 # names.covars1 <- grep("z", names(dat0), value = TRUE)[c(1:3,5:8,20,14:19)] # age-1
-names.covars1 <- grep("z", names(dat1), value = TRUE)[c(1:2,6,7:9,15:20)]#[c(2:3,5,7:9,15:20)] # age-1
+names.covars1 <- grep("z", names(dat1), value = TRUE)[c(1:2,6,8:10,16:21)]#[c(2:3,5,7:9,15:20)] # age-1
 
 print(names.covars1)
 ```
@@ -1042,6 +1042,12 @@ datatable(poptib %>% arrange(cv))
 
 ### Parameter dot plots
 
+View global covariate effect summaries
+```{r}
+param.summary[paste("mu.coef[", c(1:14), "]", sep = ""),]
+```
+
+
 Coerce to ggs object
 ```{r cache=FALSE}
 mod.gg <- ggs(as.mcmc(topmod), keep_original_order = TRUE)
@@ -1145,7 +1151,7 @@ test +
 ```
 
 ```{r include=FALSE}
-jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_GlobalCovariates.jpg", units = "in", width = 4.9, height = 5, res = 1500)
+jpeg("Figures/Dot Plots/ReddCounts_Ricker_CovarModel_DotPlot_GlobalCovariates_withgrid.jpg", units = "in", width = 4.9, height = 5, res = 1500)
 test +
   theme_bw() + 
   ylab("Environmental driver") + 
@@ -1157,7 +1163,8 @@ test +
   scale_y_discrete(labels = rev(names.covars.new), limits = rev) +
   theme(legend.position = "top", legend.title = element_blank(), axis.text = element_text(color = "black"),
         legend.key.spacing.y = unit(0, "cm"), legend.key.spacing.x = unit(1, "cm"), legend.margin = margin(0,0,0,0), 
-        panel.grid = element_blank(), axis.title = element_text(size = 13)) + 
+        panel.grid.minor = element_blank(), 
+        axis.title = element_text(size = 13)) + 
   guides(color = guide_legend(nrow = 2, byrow = TRUE)) +
   geom_point(data = test$data, aes(x = median, y = Parameter), size = 4) +
   geom_errorbarh(data = test$data, aes(xmin = Low, xmax = High), size = 2, height = 0) +
@@ -1442,7 +1449,7 @@ covsrc_jldq_summary <- read_csv("Data/Derived/ManagedFlow_SummaryMeanSD_1967-202
 covsrc_natq_summary <- read_csv("Data/Derived/NaturalFlow_SummaryMeanSD_1975-2022.csv")
 covsrc_expq_summary <- read_csv("Data/Derived/ExperiencedFlow_SummaryMeanSD_1975-2022.csv")
 covsrc_temp_summary <- read_csv("Data/Derived/Temperature_SummaryMeanSD_1967-2022.csv")
-covsummary <- rbind(covsrc_jldq_summary[c(1,2,6:9),], covsrc_natq_summary[c(6:7),], covsrc_temp_summary)
+covsummary <- rbind(covsrc_jldq_summary[c(1,2,6,8:10),], covsrc_natq_summary[c(6:7),], covsrc_temp_summary)
 covsummary
 ```
 
@@ -2109,5 +2116,166 @@ filled.contour(x = xnat, y = xjld, z = t(z),
                  #points(myddd$z_natq_peaktime, myddd$z_jld_peaktime)
                })
 dev.off()
+```
+
+
+#### Flood duration
+
+Exploratory analysis to see if flood duration is associated with productivity, as the interaction between the timing of natural and managed peak spring flows implies as much.
+
+From the interaction plot above, derive difference in peak flow timing and plot against predicted productivity:
+```{r}
+conttib %>% 
+  mutate(xnat_real = (xnat * covsummary$sd[8]) + covsummary$mean[8],
+         xjld_real = (xjld * covsummary$sd[6]) + covsummary$mean[6]) %>%
+  mutate(difff = abs(xnat_real - xjld_real)) %>%
+  ggplot(aes(x = difff, y = prod)) +
+  geom_point()
+```
+
+
+Now look at association between flood duration (lagged 3 and 4 years) and latent productivity. 
+
+Generally, when we use flood duration calculated using flow records standardized by year, we see a non-linear relationship between flood duration and productivity. Potentially indicating that flood duration calculated in this way interacts with some other variable (e.g., flood magnitude) to influence productivity. Indeed, when we use flood duration calculate from raw flow records, we see a generally positive linear relationship, providing reasonable post-hoc evidence that long periods of elevated streamflow have a positive effect on productivity, as hypothesized from the interaction between natural and managed peak flow timing. 
+```{r fig.width=7, fig.height=5}
+head(param.summary)
+flooddur <- read_csv("Data/Derived/FloodDuration.csv") %>% 
+  mutate(broodyr = year - 1) 
+
+latentprod <- matrix(data = NA, nrow = 13, ncol = 51)
+for (i in 1:13) {
+  for (j in 5:55) {
+    latentprod[i,j-4] <- log(exp(param.summary[paste("loglatent[", i, ",", j, "]", sep = ""),1]) / exp(param.summary[paste("loglatent[", i, ",", j-4, "]", sep = ""),1]))
+  }
+}
+
+
+floodtib <- tibble(population = rep(pops, each = 51),
+                   year = c(t(years)),
+                   latentprod = c(t(latentprod))) %>% 
+  mutate(broodyr4 = year - 4,
+         broodyr3 = year - 3) %>%
+  left_join(flooddur %>% 
+              select(broodyr, durflood, durflood_raw) %>% 
+              rename(durflood4 = durflood, durflood_raw4 = durflood_raw), 
+            by = c("broodyr4" = "broodyr")) %>%
+  left_join(flooddur %>% 
+              select(broodyr, durflood, durflood_raw) %>% 
+              rename(durflood3 = durflood, durflood_raw3 = durflood_raw), 
+            by = c("broodyr3" = "broodyr"))
+```
+
+
+
+::: panel-tabset
+
+##### By pop - lag 3
+```{r}
+floodtib %>%
+  ggplot() +
+  geom_point(aes(x = durflood3, y = latentprod)) + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(aes(x = durflood3, y = latentprod)) +
+  facet_wrap(~population, ncol = 5, scales = "free") +
+  theme_bw() + theme(panel.grid = element_blank()) +
+  xlab("Age-0 flood duration, lag 3 years (days)") + ylab("Latent productivity, ln(R/S)")
+```
+
+##### By pop - lag 4
+```{r}
+floodtib %>%
+  ggplot() +
+  geom_point(aes(x = durflood4, y = latentprod)) + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(aes(x = durflood4, y = latentprod)) +
+  facet_wrap(~population, ncol = 5, scales = "free") +
+  theme_bw() + theme(panel.grid = element_blank()) +
+  xlab("Age-0 flood duration, lag 4 years (days)") + ylab("Latent productivity, ln(R/S)")
+```
+
+##### Combined - std flow
+```{r}
+p1 <- floodtib %>%
+  ggplot() +
+  geom_point(aes(x = durflood4, y = latentprod, color = population)) + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(aes(x = durflood4, y = latentprod), color = "black") +
+  theme_bw() + theme(panel.grid = element_blank()) +
+  xlab("Age-0 flood duration (days)") + ylab("Latent productivity, ln(R/S)")
+
+p2 <- floodtib %>%
+  ggplot() +
+  geom_point(aes(x = durflood3, y = latentprod, color = population)) + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(aes(x = durflood3, y = latentprod), color = "black") +
+  theme_bw() + theme(panel.grid = element_blank()) +
+  xlab("Age-1 flood duration (days)") + ylab(" ")
+
+ggpubr::ggarrange(p1, p2, common.legend = TRUE, legend = "right")
+```
+
+##### Combined - raw flow
+```{r}
+p1 <- floodtib %>%
+  ggplot() +
+  geom_point(aes(x = durflood_raw4, y = latentprod, color = population)) + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(aes(x = durflood_raw4, y = latentprod), color = "black") +
+  theme_bw() + theme(panel.grid = element_blank()) +
+  xlab("Age-0 flood duration (days)") + ylab("Latent productivity, ln(R/S)")
+
+p2 <- floodtib %>%
+  ggplot() +
+  geom_point(aes(x = durflood_raw3, y = latentprod, color = population)) + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(aes(x = durflood_raw3, y = latentprod), color = "black") +
+  theme_bw() + theme(panel.grid = element_blank()) +
+  xlab("Age-1 flood duration (days)") + ylab(" ")
+
+ggpubr::ggarrange(p1, p2, common.legend = TRUE, legend = "right")
+```
+
+###### Obs prod
+```{r}
+p1 <- dat2 %>% select(stream, broodyr, lnRS) %>% left_join(flooddur %>% select(broodyr, durflood)) %>%
+  ggplot(aes(x = durflood, y = lnRS)) +
+  geom_point() + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2)) +
+  theme_bw() + theme(panel.grid = element_blank())
+
+p2 <- dat2 %>% select(stream, broodyr, lnRS) %>% left_join(flooddur %>% select(broodyr, durflood_raw)) %>%
+  ggplot(aes(x = durflood_raw, y = lnRS)) +
+  geom_point() + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(method = "lm") +
+  theme_bw() + theme(panel.grid = element_blank())
+
+ggpubr::ggarrange(p1, p2, common.legend = TRUE, legend = "right")
+```
+:::
+
+
+Write out figure showing non-linear relationship between flood duration (using flow records standardized by year) and latent productivity:
+```{r fig.width=4, fig.height=4}
+jpeg("Figures/Marginal Effects/LatentProductivity-FloodDurationSTD.jpg", units = "in", width = 3, height = 3, res = 1500)
+floodtib %>%
+  ggplot() +
+  geom_point(aes(x = durflood4, y = latentprod), shape = 1) + 
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(aes(x = durflood4, y = latentprod), method = "lm", formula = y ~ poly(x,2), lineend = "round") +
+  theme_bw() + theme(panel.grid = element_blank(), axis.text = element_text(color = "black")) +
+  xlab("Flood duration (days)") + ylab("Latent productivity, ln(R/S)")
+dev.off()
+```
+
+Polynomial regression summary: latent productivity ~ flood duration, std
+```{r}
+summary(lm(latentprod ~ durflood4 + I(durflood4^2), floodtib))
+```
+
+Linear regression summary: latent productivity ~ flood duration, raw
+```{r}
+summary(lm(latentprod ~ durflood_raw4, floodtib))
 ```
 
