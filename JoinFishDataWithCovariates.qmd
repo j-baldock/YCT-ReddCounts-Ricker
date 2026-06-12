@@ -255,6 +255,16 @@ cor.test(ddd1$jld_peaktime, ddd1$natq_peaktime)
 #plot(ddd1$jld_peaktime, ddd1$natq_peaktime)
 ```
 
+How related are peak timing and spring temperature?
+```{r}
+ddd <- natflow %>% filter(flowstn == "SnakeNat") %>% select(broodyr, natq_peaktime) %>% left_join(airtemp %>% filter(tempstn == "moose") %>% select(broodyr, temp_sprmean))
+cor.test(ddd$natq_peaktime, ddd$temp_sprmean)
+ddd %>% 
+  ggplot(aes(x = temp_sprmean, y = natq_peaktime)) +
+  geom_point() + geom_smooth(method = "lm")
+```
+
+
 #### Peak magnitude
 
 No multicollinearity issues between the magnitude of peak natural vs. managed flows, although these variables are somewhat correlated prior to 1989.
