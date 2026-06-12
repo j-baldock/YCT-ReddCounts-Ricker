@@ -217,7 +217,7 @@ p2 <- flow6 %>%
 p3 <- flow6 %>%
   filter(site == "SnakeBeFlat") %>%
   ggplot(aes(x = update(date, year = 2000), y = flow_cfs, group = year)) +
-  geom_line(color = "grey40", linewidth = 0.2, alpha = 0.6) +
+  geom_line(color = "violet", linewidth = 0.2, alpha = 0.6) +
   geom_line(data = singyr %>% filter(site == "SnakeBeFlat"), aes(x = update(date, year = 2000), y = flow_cfs), linewidth = 0.8) +
   scale_x_date(date_labels = "%b", expand = c(0.01,0.01)) +
   coord_cartesian(ylim = c(0,15000)) +
@@ -423,6 +423,101 @@ Pairs plots for key managed flow covariates:
 ```{r fig.width=7, fig.height=7}
 ggpairs(jldflow %>% select(broodyr, jld_summean, jld_peakmag, jld_peaktime, jld_winmean, jld_winvar))
 ```
+
+
+Is greater mismatch in natural and managed peak flow timing related to duration of flood pulse (combined flow)?
+
+* When using raw flow records and defining floods as the 0.75 quantile from the long-term data, no relationship. But this appears to be largely driven by interannual variation in water availability/mean annual flows and associated effects on water management/winter flow
+
+* But if we standardize flow by year (remove interannual variation in water availability), there is a strong positive relationship between mismatch in timing and flood duration (floods defined as flows > 1 SD above the annual mean)
+
+```{r}
+# flow3 %>%
+#   filter(year >= 1975) %>%
+#   group_by(year) %>%
+#   mutate(z_SnakeBeFlat = scale(SnakeBeFlat)) %>%
+#   ggplot(aes(x = date, y = z_SnakeBeFlat)) +
+#   geom_line() +
+#   geom_hline(yintercept = thresh)
+
+thresh <- quantile(flow3$SnakeBeFlat, probs = 0.75, na.rm = TRUE)
+flow3 %>% 
+  group_by(year) %>%
+  summarize(peak_jld = ifelse(doy[which.max(SnakeMoran)] > 60 & doy[which.max(SnakeMoran)] < 212, doy[which.max(SnakeMoran)], NA),
+            peak_nat = ifelse(doy[which.max(SnakeNat)] > 60 & doy[which.max(SnakeNat)] < 212, doy[which.max(SnakeNat)], NA),
+            durflood = sum(SnakeBeFlat > thresh)) %>%
+  ungroup() %>%
+  mutate(difff = abs(peak_jld - peak_nat)) %>%
+  ggplot(aes(x = difff, y = durflood)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab("Mismatch in timing of natural and managed peak flows (days)") + ylab("Flood duration (days > 75% quantile, long-term)")
+
+flow3 %>% 
+  group_by(year) %>%
+  mutate(z_SnakeBeFlat = scale(SnakeBeFlat)) %>%
+  summarize(peak_jld = ifelse(doy[which.max(SnakeMoran)] > 60 & doy[which.max(SnakeMoran)] < 212, doy[which.max(SnakeMoran)], NA),
+            peak_nat = ifelse(doy[which.max(SnakeNat)] > 60 & doy[which.max(SnakeNat)] < 212, doy[which.max(SnakeNat)], NA),
+            durflood = sum(z_SnakeBeFlat > 1)) %>%
+  ungroup() %>%
+  mutate(difff = abs(peak_jld - peak_nat)) %>%
+  ggplot(aes(x = difff, y = durflood)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab("Mismatch in timing of natural and managed peak flows (days)") + ylab("Flood duration (days > annual 1 SD)")
+
+write_csv(flow3 %>% 
+  group_by(year) %>%
+  mutate(z_SnakeBeFlat = scale(SnakeBeFlat)) %>%
+  summarize(peak_jld = ifelse(doy[which.max(SnakeMoran)] > 60 & doy[which.max(SnakeMoran)] < 212, doy[which.max(SnakeMoran)], NA),
+            peak_nat = ifelse(doy[which.max(SnakeNat)] > 60 & doy[which.max(SnakeNat)] < 212, doy[which.max(SnakeNat)], NA),
+            durflood = sum(z_SnakeBeFlat > 1)) %>%
+  ungroup() %>%
+  mutate(difff = abs(peak_jld - peak_nat)) %>% 
+    left_join(flow3 %>% 
+  group_by(year) %>%
+  summarize(durflood_raw = sum(SnakeBeFlat > thresh)) %>%
+  ungroup()),
+  "Data/Derived/FloodDuration.csv")
+
+```
+
+```{r include=FALSE}
+jpeg("Figures/Covariates/FloodDuration-MismatchPeakTime_Qraw.jpg", units = "in", width = 4, height = 4, res = 1500)
+thresh <- quantile(flow3$SnakeBeFlat, probs = 0.75, na.rm = TRUE)
+flow3 %>% 
+  group_by(year) %>%
+  summarize(peak_jld = ifelse(doy[which.max(SnakeMoran)] > 60 & doy[which.max(SnakeMoran)] < 212, doy[which.max(SnakeMoran)], NA),
+            peak_nat = ifelse(doy[which.max(SnakeNat)] > 60 & doy[which.max(SnakeNat)] < 212, doy[which.max(SnakeNat)], NA),
+            durflood = sum(SnakeBeFlat > thresh)) %>%
+  ungroup() %>%
+  mutate(difff = abs(peak_jld - peak_nat)) %>%
+  ggplot(aes(x = difff, y = durflood)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab("Mismatch in timing of natural and\nmanaged peak flow (days)") + ylab("Flood duration, raw (days)") +
+  theme_bw() + theme(panel.grid = element_blank(), axis.text = element_text(color = "black"))
+dev.off()
+
+jpeg("Figures/Covariates/FloodDuration-MismatchPeakTime_Qstd.jpg", units = "in", width = 3, height = 3, res = 1500)
+flow3 %>% 
+  group_by(year) %>%
+  mutate(z_SnakeBeFlat = scale(SnakeBeFlat)) %>%
+  summarize(peak_jld = ifelse(doy[which.max(SnakeMoran)] > 60 & doy[which.max(SnakeMoran)] < 212, doy[which.max(SnakeMoran)], NA),
+            peak_nat = ifelse(doy[which.max(SnakeNat)] > 60 & doy[which.max(SnakeNat)] < 212, doy[which.max(SnakeNat)], NA),
+            durflood = sum(z_SnakeBeFlat > 1)) %>%
+  ungroup() %>%
+  mutate(difff = abs(peak_jld - peak_nat)) %>%
+  ggplot(aes(x = difff, y = durflood)) +
+  geom_point(shape = 1) +
+  geom_smooth(method = "lm", lineend = "round") +
+  xlab("Peak flow timing mismatch (days)") + ylab("Flood duration (days)") +
+  theme_bw() + theme(panel.grid = element_blank(), axis.text = element_text(color = "black"))
+dev.off()
+```
+
+
+
 
 #### Ramp-down
 
